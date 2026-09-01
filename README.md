@@ -54,6 +54,40 @@ npm run app
 
 If `OPENAI_API_KEY` is blank, the header shows **AI API Offline · Local Bot** and the whole game remains playable without API charges.
 
+## Running as a service on macOS
+
+RiverMindPoker can run as a per-user macOS LaunchAgent. The service uses the production build, starts automatically after login, runs independently of Terminal/Codex/ChatGPT, and is restarted by `launchd` after an unexpected exit.
+
+Install or update the service (this also creates a fresh production build):
+
+```bash
+npm run service:install
+```
+
+Open [http://localhost:3001](http://localhost:3001).
+
+The installer generates a machine-specific file at `~/Library/LaunchAgents/com.rivermind.poker.plist`. Absolute project and Node.js paths are written only to that local file; the repository stores a portable template.
+
+Service commands:
+
+```bash
+npm run service:status   # inspect launchd status and PID
+npm run service:logs     # show the last 100 stdout/stderr lines
+npm run service:start    # load and start an installed service
+npm run service:stop     # stop it for the current login session
+npm run service:restart  # restart immediately
+npm run service:uninstall # stop it and disable automatic startup
+```
+
+Logs are stored outside the repository:
+
+```text
+~/Library/Logs/RiverMindPoker/server.log
+~/Library/Logs/RiverMindPoker/server-error.log
+```
+
+After changing application code, run `npm run service:install` again to rebuild and restart the installed service. The existing `npm run dev`, `npm start`, and `npm run app` workflows remain available for development and manual operation.
+
 ## Environment variables
 
 Create `.env` from `.env.example` and set only the values needed locally:

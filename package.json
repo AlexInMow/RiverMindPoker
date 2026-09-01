@@ -8,6 +8,13 @@
     "dev": "concurrently -k -n server,client -c cyan,green \"tsx watch server/index.ts\" \"vite --config vite.config.ts\"",
     "build": "vite build --config vite.config.ts && tsup server/index.ts --format esm --out-dir dist/server --sourcemap --clean",
     "start": "node dist/server/index.js",
+    "service:install": "bash scripts/macos-service.sh install",
+    "service:start": "bash scripts/macos-service.sh start",
+    "service:stop": "bash scripts/macos-service.sh stop",
+    "service:restart": "bash scripts/macos-service.sh restart",
+    "service:status": "bash scripts/macos-service.sh status",
+    "service:logs": "bash scripts/macos-service.sh logs",
+    "service:uninstall": "bash scripts/macos-service.sh uninstall",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
