@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Production builds and generated output
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local caches and temporary files
+.cache/
+.tmp/
+tmp/
+temp/
+*.tmp
+
+# Local databases and user data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# IDE and editor state
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# Local-only overrides
+*.local
