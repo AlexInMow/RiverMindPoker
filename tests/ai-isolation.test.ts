@@ -84,6 +84,9 @@ describe("AI boundary", () => {
     expect(aiActions).toHaveLength(2);
     expect(aiActions[0]).toMatchObject({ street: "preflop", action: "check" });
     expect(aiActions[1].street).toBe("flop");
+    expect(session.lastTrace?.localDecisionTrace).toBeDefined();
+    const trace = JSON.stringify(store.publicState(session).debug?.lastAITrace);
+    for (const card of session.state.players.human.cards) expect(trace).not.toContain(`"${card}"`);
     random.mockRestore();
   });
 });

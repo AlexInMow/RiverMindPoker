@@ -93,6 +93,20 @@ export function deriveAIContext(state: EngineState): {
   const amountToCall = Math.min(state.players.ai.stack, Math.max(0, state.currentBet - state.players.ai.streetBet));
   const effectiveStack = Math.min(state.players.ai.stack, state.players.human.stack);
   const betLevel = preflopBetLevel(state.actions);
+  const bigBlind = state.config.bigBlind;
+  const totalEffectiveStack = Math.min(
+    state.players.ai.stack + state.players.ai.totalContribution,
+    state.players.human.stack + state.players.human.totalContribution,
+  );
+  const aiEffectiveMaximum = Math.min(
+    state.players.ai.streetBet + state.players.ai.stack,
+    state.players.human.streetBet + state.players.human.stack,
+  );
+  const minimumRaise = state.actor === "ai" && !state.raiseLocked.includes("ai")
+    ? state.currentBet + state.minRaise <= aiEffectiveMaximum
+      ? state.currentBet + state.minRaise
+      : null
+    : null;
   return {
     amountToCall,
     potOdds: amountToCall ? round(amountToCall / (state.pot + amountToCall)) : 0,
@@ -106,6 +120,21 @@ export function deriveAIContext(state: EngineState): {
       currentBet: state.currentBet,
       aiStreetBet: state.players.ai.streetBet,
       playerStreetBet: state.players.human.streetBet,
+      effectiveStackBB: round(totalEffectiveStack / bigBlind),
+      amountToCallBB: round(amountToCall / bigBlind),
+      potBB: round(state.pot / bigBlind),
+      aiCommittedBB: round(state.players.ai.totalContribution / bigBlind),
+      humanCommittedBB: round(state.players.human.totalContribution / bigBlind),
+      committedFractionOfEffectiveStack: totalEffectiveStack
+        ? round(state.players.ai.totalContribution / totalEffectiveStack)
+        : 0,
+      minimumRaiseTo: minimumRaise,
+      minimumRaiseToBB: minimumRaise === null ? null : round(minimumRaise / bigBlind),
+      minimumRaiseIncrementBB: minimumRaise === null ? null : round((minimumRaise - state.currentBet) / bigBlind),
+      remainingStackAfterCall: state.players.ai.stack - amountToCall,
+      remainingStackAfterMinimumRaise: minimumRaise === null
+        ? null
+        : state.players.ai.stack - Math.max(0, minimumRaise - state.players.ai.streetBet),
       lastAction: compactLastAction(state.actions),
     },
   };

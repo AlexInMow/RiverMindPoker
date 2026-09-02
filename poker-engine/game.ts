@@ -42,6 +42,8 @@ export interface EngineState {
   actions: PlayerAction[];
   handLog: string[];
   acted: PlayerId[];
+  /** Players whose raise right has been consumed since the last full bet/raise. */
+  raiseLocked: PlayerId[];
   result?: HandResult;
   /** Fixed chip pool for the session; no rebuy mechanics exist. */
   expectedTotalChips: number;
@@ -90,6 +92,9 @@ export function assertChipAccounting(state: EngineState, context = "state update
     if (player.allIn !== (player.stack === 0)) {
       throw new Error(`Accounting invariant failed after ${context}: ${id}.allIn does not match its stack`);
     }
+  }
+  if (new Set(state.raiseLocked).size !== state.raiseLocked.length || state.raiseLocked.some((id) => id !== "human" && id !== "ai")) {
+    throw new Error(`Accounting invariant failed after ${context}: invalid raise-right state`);
   }
 
   const stacks = state.players.human.stack + state.players.ai.stack;
@@ -238,6 +243,7 @@ export function createGame(config: GameConfig, randomIndex?: RandomIndex): Engin
     actions: [],
     handLog: [],
     acted: [],
+    raiseLocked: [],
     expectedTotalChips: config.startingStack * 2,
   };
   return startHand(state, randomIndex, false);
@@ -267,6 +273,7 @@ function startHand(state: EngineState, randomIndex: RandomIndex | undefined, rot
   state.matchOver = false;
   state.actions = [];
   state.acted = [];
+  state.raiseLocked = [];
   state.result = undefined;
   state.handLog = [`Hand #${state.handNumber}`, `${playerName(state.button)} ${state.button === "human" ? "are" : "is"} Button / SB`];
   for (const id of ["human", "ai"] as PlayerId[]) {
@@ -304,6 +311,7 @@ export function getLegalActions(state: EngineState, id: PlayerId): LegalAction[]
   const ownMax = player.streetBet + player.stack;
   const effectiveMax = Math.min(ownMax, opponent.streetBet + opponent.stack);
   const actions: LegalAction[] = [];
+  const canRaise = !state.raiseLocked.includes(id);
 
   if (toCall > 0) {
     actions.push({ type: "fold", label: "FOLD" });
@@ -312,16 +320,16 @@ export function getLegalActions(state: EngineState, id: PlayerId): LegalAction[]
     actions.push({ type: "check", label: "CHECK" });
   }
 
-  if (state.currentBet === 0 && effectiveMax > 0) {
+  if (canRaise && state.currentBet === 0 && effectiveMax > 0) {
     const min = Math.min(state.config.bigBlind, effectiveMax);
     actions.push({ type: "bet", min, max: effectiveMax, label: `BET TO ${min}` });
-  } else if (effectiveMax > state.currentBet) {
+  } else if (canRaise && effectiveMax > state.currentBet) {
     const fullMin = state.currentBet + state.minRaise;
     if (effectiveMax >= fullMin) actions.push({ type: "raise", min: fullMin, max: effectiveMax, label: `RAISE TO ${fullMin}` });
   }
 
   const allInTarget = ownMax;
-  if (player.stack > 0 && allInTarget > player.streetBet) {
+  if (player.stack > 0 && allInTarget > player.streetBet && (allInTarget <= state.currentBet || canRaise)) {
     actions.push({ type: "all-in", amount: allInTarget, label: `ALL-IN ${allInTarget}` });
   }
   return actions;
@@ -359,11 +367,13 @@ export function applyAction(state: EngineState, id: PlayerId, rawAction: EngineA
     record(state, id, "check", undefined, { aggressive: false });
     logLine = `${playerName(id)} checks`;
     state.acted.push(id);
+    state.raiseLocked.push(id);
   } else if (action.type === "call") {
     const paid = putChips(state, id, Math.max(0, state.currentBet - player.streetBet));
     record(state, id, "call", paid, { effectiveAmount: player.streetBet, aggressive: false });
     logLine = `${playerName(id)} calls ${paid}`;
     state.acted.push(id);
+    state.raiseLocked.push(id);
   } else {
     let target = action.type === "all-in"
       ? getLegalActions(state, id).find((candidate) => candidate.type === "all-in")!.amount!
@@ -375,6 +385,7 @@ export function applyAction(state: EngineState, id: PlayerId, rawAction: EngineA
       record(state, id, "all-in", target, { effectiveAmount: effectiveTarget, aggressive: false });
       state.handLog.push(`${playerName(id)} calls all-in for ${paid}`);
       state.acted = [...new Set([...state.acted, id])];
+      state.raiseLocked = [...new Set([...state.raiseLocked, id])];
       if (bettingRoundComplete(state)) advanceStreet(state);
       else {
         state.actor = other(id);
@@ -392,12 +403,17 @@ export function applyAction(state: EngineState, id: PlayerId, rawAction: EngineA
       ? `${playerName(id)} is all-in to ${target}`
       : `${playerName(id)} ${aggressiveType === "bet" ? "bets" : "raises to"} ${target}`;
     const raiseSize = effectiveTarget - previousBet;
-    if (raiseSize >= state.minRaise) state.minRaise = raiseSize;
+    const fullRaise = raiseSize >= state.minRaise;
+    if (fullRaise) state.minRaise = raiseSize;
     state.currentBet = Math.max(state.currentBet, target);
     state.acted = [id];
+    // An insufficient all-in requires a response but does not restore a prior
+    // bettor's right to raise. A full raise reopens action for the opponent.
+    state.raiseLocked = fullRaise ? [id] : [...new Set([...state.raiseLocked, id])];
     void paid;
   }
   state.acted = [...new Set(state.acted)];
+  state.raiseLocked = [...new Set(state.raiseLocked)];
   state.handLog.push(logLine);
 
   if (bettingRoundComplete(state)) {
@@ -446,6 +462,7 @@ function advanceStreet(state: EngineState): void {
   state.currentBet = 0;
   state.minRaise = state.config.bigBlind;
   state.acted = [];
+  state.raiseLocked = [];
   state.actor = other(state.button); // BB acts first postflop.
 }
 

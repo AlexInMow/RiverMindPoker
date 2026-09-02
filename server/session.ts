@@ -13,7 +13,7 @@ import type {
   PlayerId,
   PublicGameState,
 } from "../shared/types";
-import { dummyDecision } from "./ai/dummyBot";
+import { dummyDecisionWithTrace } from "./ai/dummyBot";
 import { OpenAIBot } from "./ai/openaiBot";
 import { validateAndNormalizeDecision } from "./ai/validation";
 import { deriveAIContext } from "./ai/context";
@@ -101,7 +101,8 @@ export class SessionStore {
             decision = result.decision;
             session.lastTrace = result.trace;
           } else {
-            const raw = dummyDecision(visible, session.state.config.strategy, session.state.config.tableTalk, session.state.config.language);
+            const local = dummyDecisionWithTrace(visible, session.state.config.strategy, session.state.config.tableTalk, session.state.config.language);
+            const raw = local.decision;
             const normalized = validateAndNormalizeDecision(raw, visible.legalActions);
             decision = normalized.decision;
             session.lastTrace = {
@@ -110,10 +111,12 @@ export class SessionStore {
               rawResponse: raw,
               validation: normalized.validation,
               latencyMs: Date.now() - started,
+              localDecisionTrace: local.trace,
             };
           }
         } catch (error) {
-          const raw = dummyDecision(visible, session.state.config.strategy, session.state.config.tableTalk, session.state.config.language);
+          const local = dummyDecisionWithTrace(visible, session.state.config.strategy, session.state.config.tableTalk, session.state.config.language);
+          const raw = local.decision;
           const normalized = validateAndNormalizeDecision(raw, visible.legalActions);
           decision = normalized.decision;
           session.lastTrace = {
@@ -122,12 +125,17 @@ export class SessionStore {
             rawResponse: raw,
             validation: `OpenAI error; local fallback used: ${error instanceof Error ? error.message : "unknown error"}`,
             latencyMs: Date.now() - started,
+            localDecisionTrace: local.trace,
           };
         }
         const calibrated = calibrateAdaptiveDecision(decision, visible, session.state.config.strategy);
         decision = calibrated.decision;
         if (calibrated.adjustment && session.lastTrace) {
           session.lastTrace.validation = `${session.lastTrace.validation}; ${calibrated.adjustment}`;
+          if (session.lastTrace.localDecisionTrace) {
+            session.lastTrace.localDecisionTrace.chosenAction = decision.action;
+            session.lastTrace.localDecisionTrace.reasonSummary = `${session.lastTrace.localDecisionTrace.reasonSummary} ${calibrated.adjustment}`;
+          }
         }
         session.tableTalk = decision.table_talk || undefined;
         const action: EngineAction = { type: decision.action, amount: decision.amount };

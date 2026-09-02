@@ -22,6 +22,19 @@ describe("deterministic AI context", () => {
       contextMetrics: { facingAggression: true, preflopBetLevel: 2, isInPositionPostflop: false },
     });
     expect(context.contextMetrics.lastAction).toMatchObject({ player: "human", action: "raise", amount: 300 });
+    expect(context.contextMetrics).toMatchObject({
+      effectiveStackBB: 100,
+      amountToCallBB: 2,
+      potBB: 4,
+      aiCommittedBB: 1,
+      humanCommittedBB: 3,
+      committedFractionOfEffectiveStack: 0.01,
+      minimumRaiseTo: 500,
+      minimumRaiseToBB: 5,
+      minimumRaiseIncrementBB: 2,
+      remainingStackAfterCall: 9_700,
+      remainingStackAfterMinimumRaise: 9_500,
+    });
     expect(game).toEqual(snapshot);
   });
 

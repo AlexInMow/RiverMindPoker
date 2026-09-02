@@ -7,6 +7,7 @@ export type Strategy = "balanced" | "tag" | "lag" | "nit" | "calling-station" | 
 export type Difficulty = "casual" | "strong" | "expert";
 export type Language = "ru" | "en";
 export type ActionType = "fold" | "check" | "call" | "bet" | "raise" | "all-in";
+export type PreflopHandClass = "premium" | "strong" | "medium" | "speculative" | "weak";
 
 export interface GameConfig {
   language: Language;
@@ -154,7 +155,53 @@ export interface AIContextMetrics {
   currentBet: number;
   aiStreetBet: number;
   playerStreetBet: number;
+  effectiveStackBB: number;
+  amountToCallBB: number;
+  potBB: number;
+  aiCommittedBB: number;
+  humanCommittedBB: number;
+  committedFractionOfEffectiveStack: number;
+  minimumRaiseTo: number | null;
+  minimumRaiseToBB: number | null;
+  minimumRaiseIncrementBB: number | null;
+  remainingStackAfterCall: number;
+  remainingStackAfterMinimumRaise: number | null;
   lastAction?: CompactHandAction;
+}
+
+export interface LocalBotCandidateAction {
+  action: ActionType;
+  probability: number;
+  amount: number;
+}
+
+export interface LocalBotDecisionTrace {
+  handClass?: PreflopHandClass;
+  handLabel?: string;
+  rawPreflopStrength?: number;
+  preflopBetLevel: number;
+  effectiveStackBB: number;
+  amountToCallBB: number;
+  potOdds: number;
+  committedBB: number;
+  committedFraction: number;
+  raiseTargetBB: number | null;
+  raiseIncrementBB: number | null;
+  resultingPotBB: number | null;
+  remainingStackAfterCall: number;
+  remainingStackAfterRaise: number | null;
+  strategy: Strategy;
+  adaptiveConfidence: number;
+  baseAggression: number;
+  adjustedAggression: number;
+  continueThreshold: number;
+  raiseThreshold: number;
+  jamThreshold: number;
+  randomRoll: number;
+  candidateActions: LocalBotCandidateAction[];
+  chosenAction: ActionType;
+  stackOffAllowed: boolean;
+  reasonSummary: string;
 }
 
 export interface AdaptiveMetricConfidence {
@@ -270,6 +317,7 @@ export interface AITrace {
   validation: string;
   latencyMs: number;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  localDecisionTrace?: LocalBotDecisionTrace;
 }
 
 export interface DebugInfo {

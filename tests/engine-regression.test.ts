@@ -15,6 +15,7 @@ describe("poker engine betting regressions", () => {
     applyAction(game, "human", { type: "raise", amount: 300 });
     expect(getLegalActions(game, "ai").find((action) => action.type === "raise")?.min).toBe(500);
     applyAction(game, "ai", { type: "raise", amount: 500 });
+    expect(getLegalActions(game, "human").some((action) => action.type === "raise")).toBe(true);
     expect(getLegalActions(game, "human").find((action) => action.type === "raise")?.min).toBe(700);
     applyAction(game, "human", { type: "raise", amount: 700 });
     expect(game.minRaise).toBe(200);
@@ -33,7 +34,8 @@ describe("poker engine betting regressions", () => {
     expect(game.minRaise).toBe(200);
     expect(game.actions.at(-1)).toMatchObject({ player: "ai", action: "all-in", amount: 350 });
     expect(game.actions.at(-1)).toMatchObject({ effectiveAmount: 350, aggressive: true });
-    expect(getLegalActions(game, "human").map((action) => action.type)).toEqual(["fold", "call", "all-in"]);
+    expect(getLegalActions(game, "human").map((action) => action.type)).toEqual(["fold", "call"]);
+    expect(game.actor).toBe("human");
 
     applyAction(game, "human", { type: "call" });
     expect(game.street).toBe("complete");
