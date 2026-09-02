@@ -182,7 +182,18 @@ export function translateLog(line: string, language: Language): string {
   return line;
 }
 
-const tendencyRu: Record<string, string> = { "sample size is still small": "пока недостаточно раздач для точного профиля", "enters many pots": "входит во многие банки", "raises frequently preflop": "часто повышает на префлопе", "folds often when facing pressure": "часто сдаётся под давлением", "uses aggressive actions frequently": "часто выбирает агрессивные действия", "no pronounced tendency detected": "явных тенденций пока не обнаружено" };
+const tendencyRu: Record<string, string> = {
+  "sample size is still small": "пока недостаточно раздач для точного профиля",
+  "enters many pots": "входит во многие банки",
+  "raises frequently preflop": "часто повышает на префлопе",
+  "folds often when facing pressure": "часто сдаётся под давлением",
+  "often folds to 3-bets": "часто сдаётся на 3-бет",
+  "often folds to flop continuation bets": "часто сдаётся на продолженную ставку флопа",
+  "continuation-bets the flop frequently": "часто ставит контбет на флопе",
+  "frequently barrels the turn": "часто продолжает ставить на тёрне",
+  "uses aggressive actions frequently": "часто выбирает агрессивные действия",
+  "no pronounced tendency detected": "явных тенденций пока не обнаружено",
+};
 export function translateTendency(value: string, language: Language): string { return language === "ru" ? tendencyRu[value] ?? value : value; }
 
 export function actionAnnouncement(action: PlayerAction, language: Language): string {

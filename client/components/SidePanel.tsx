@@ -31,6 +31,7 @@ function LogLine({ line, language, resultTextOverride }: { line: string; languag
 
 function Stats({ game, language }: { game: PublicGameState; language: Language }) {
   const stats = game.stats;
+  const sampledRate = (rate: number, opportunities: number) => `${rate}% · ${opportunities}`;
   const points = useMemo(() => {
     const values = stats.chipHistory.map((point) => point.chips);
     const min = Math.min(...values, game.config.startingStack) - game.config.bigBlind;
@@ -40,6 +41,14 @@ function Stats({ game, language }: { game: PublicGameState; language: Language }
   const entries = [
     [t(language, "handsPlayed"), stats.hands], [t(language, "handsWon"), stats.handsWon], [t(language, "showdownsWon"), `${stats.showdownsWon}/${stats.showdowns}`], [t(language, "biggestPot"), stats.biggestPot.toLocaleString()],
     ["VPIP", `${stats.vpip}%`], ["PFR", `${stats.pfr}%`], [language === "ru" ? "3-бет" : "3-Bet", `${stats.threeBet}%`], [t(language, "aggression"), stats.aggressionFactor],
+    [language === "ru" ? "Фолд" : "Fold frequency", sampledRate(stats.foldFrequency, stats.foldOpportunities)],
+    [language === "ru" ? "Фолд на 3-бет" : "Fold to 3-bet", sampledRate(stats.foldToThreeBet, stats.foldToThreeBetOpportunities)],
+    [language === "ru" ? "Фолд на контбет" : "Fold to c-bet", sampledRate(stats.foldToCBet, stats.foldToCBetOpportunities)],
+    [language === "ru" ? "Контбет флопа" : "Flop c-bet", sampledRate(stats.flopCBet, stats.flopCBetOpportunities)],
+    [language === "ru" ? "Баррель тёрна" : "Turn barrel", sampledRate(stats.turnBarrel, stats.turnBarrelOpportunities)],
+    [language === "ru" ? "Агрессия ривера" : "River aggression", sampledRate(stats.riverAggression, stats.riverOpportunities)],
+    [language === "ru" ? "Чек-рейз" : "Check-raise", sampledRate(stats.checkRaise, stats.checkRaiseOpportunities)],
+    ["WTSD", `${stats.wentToShowdown}%`], ["W$SD", `${stats.wonAtShowdown}%`],
     [t(language, "netChips"), `${stats.netChips >= 0 ? "+" : ""}${stats.netChips}`], [language === "ru" ? "ББ / 100" : "BB / 100", stats.bbPer100],
   ];
   return <div className="stats-pane">

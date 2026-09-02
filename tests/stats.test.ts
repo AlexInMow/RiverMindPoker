@@ -150,4 +150,20 @@ describe("player preflop statistics", () => {
     ]);
     expect(profile).toMatchObject({ checkRaise: 100, checkRaiseOpportunities: 1, riverAggression: 100, riverOpportunities: 1 });
   });
+
+  it("reports WTSD from flops seen and W$SD from actual showdowns", () => {
+    const tracker = new StatsTracker(config.startingStack, config.bigBlind);
+    const showdown = createGame(config, () => 0);
+    applyAction(showdown, "human", { type: "call" });
+    applyAction(showdown, "ai", { type: "check" });
+    for (let street = 0; street < 3; street += 1) {
+      applyAction(showdown, "ai", { type: "check" });
+      applyAction(showdown, "human", { type: "check" });
+    }
+    tracker.finish(showdown);
+    expect(tracker.profile()).toMatchObject({
+      wentToShowdown: 100,
+      wonAtShowdown: showdown.result!.winners.includes("human") ? 100 : 0,
+    });
+  });
 });

@@ -14,6 +14,7 @@ import type {
 import { dummyDecision } from "./ai/dummyBot";
 import { OpenAIBot } from "./ai/openaiBot";
 import { validateAndNormalizeDecision } from "./ai/validation";
+import { deriveAIContext } from "./ai/context";
 import { buildAdaptiveHandSummary, findRepeatedPlayerPatterns } from "./adaptiveHistory";
 import { StatsTracker, type ObservedAction } from "./stats";
 
@@ -152,6 +153,7 @@ export class SessionStore {
 
   aiVisibleState(session: Session): AIVisibleGameState {
     const state = session.state;
+    const context = deriveAIContext(state);
     return {
       game: "Heads-Up No-Limit Texas Hold'em",
       handNumber: state.handNumber,
@@ -159,6 +161,7 @@ export class SessionStore {
       aiHoleCards: [...state.players.ai.cards],
       board: [...state.board],
       pot: state.pot,
+      ...context,
       aiStack: state.players.ai.stack,
       playerStack: state.players.human.stack,
       blinds: { small: state.config.smallBlind, big: state.config.bigBlind },

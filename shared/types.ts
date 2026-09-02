@@ -125,6 +125,30 @@ export interface RepeatedPlayerPattern {
   handNumbers: number[];
 }
 
+export interface BoardMetrics {
+  cards: number;
+  highCard: number | null;
+  uniqueRanks: number;
+  paired: boolean;
+  trips: boolean;
+  maxSuitCount: number;
+  monotone: boolean;
+  twoTone: boolean;
+  broadwayCards: number;
+  connectedness: number;
+  wetness: number;
+}
+
+export interface AIContextMetrics {
+  isInPositionPostflop: boolean;
+  facingAggression: boolean;
+  preflopBetLevel: number;
+  currentBet: number;
+  aiStreetBet: number;
+  playerStreetBet: number;
+  lastAction?: CompactHandAction;
+}
+
 export interface SessionStats extends PlayerProfile {
   handsWon: number;
   showdowns: number;
@@ -173,6 +197,12 @@ export interface AIVisibleGameState {
   aiHoleCards: Card[];
   board: Card[];
   pot: number;
+  amountToCall: number;
+  potOdds: number;
+  effectiveStack: number;
+  spr: number;
+  boardMetrics: BoardMetrics;
+  contextMetrics: AIContextMetrics;
   aiStack: number;
   playerStack: number;
   blinds: { small: number; big: number };

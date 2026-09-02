@@ -39,6 +39,7 @@ export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummar
         if (action.player === "human") humanPreflopAggression = true;
       }
     } else {
+      const noPriorStreetAggression = !firstPostflopAggressor[action.street];
       if (action.player === "human" && action.action === "check") humanCheckedPostflop[action.street] = true;
       if (action.player === "ai" && isAggressive && humanCheckedPostflop[action.street]) aiBetAfterHumanCheck[action.street] = true;
       if (action.player === "human" && isAggressive && aiBetAfterHumanCheck[action.street]) humanCheckRaise = true;
@@ -47,7 +48,7 @@ export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummar
         humanFlopPressure = true;
         if (preflopAggressor === "human" && firstPostflopAggressor.flop === "human") humanFlopCBet = true;
       }
-      if (action.player === "human" && action.street === "turn" && isAggressive && humanFlopCBet) humanTurnBarrel = true;
+      if (action.player === "human" && action.street === "turn" && isAggressive && humanFlopCBet && noPriorStreetAggression) humanTurnBarrel = true;
       if (action.player === "human" && action.street === "river" && isAggressive) humanRiverAggression = true;
     }
     if (isAggressive) targets[action.street] = action.amount ?? priorTarget;

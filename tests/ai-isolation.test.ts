@@ -18,7 +18,20 @@ describe("AI boundary", () => {
     for (const card of session.state.players.human.cards) expect(serialized).not.toContain(`"${card}"`);
     expect(Object.keys(visible)).not.toContain("humanHoleCards");
     expect(Object.keys(visible)).not.toContain("players");
+    expect(Object.keys(visible)).not.toContain("deck");
+    expect(Object.keys(visible)).not.toContain("burnCards");
+    expect(Object.keys(visible)).not.toContain("initialHoleCards");
     expect(visible.aiHoleCards).toEqual(session.state.players.ai.cards);
+    expect(visible).toHaveProperty("amountToCall");
+    expect(visible).toHaveProperty("potOdds");
+    expect(visible).toHaveProperty("effectiveStack");
+    expect(visible).toHaveProperty("spr");
+    expect(visible).toHaveProperty("boardMetrics");
+
+    store.act(session, { type: "fold" });
+    const withHistory = JSON.stringify(store.aiVisibleState(session));
+    for (const card of session.state.players.human.cards) expect(withHistory).not.toContain(`"${card}"`);
+    expect(session.adaptiveHands).toHaveLength(1);
   });
 
   it("clamps an out-of-range model raise", () => {
@@ -65,7 +78,10 @@ describe("AI boundary", () => {
     await store.runAI(session);
     expect(session.state.street).toBe("flop");
     expect(session.state.actor).toBe("human");
-    expect(session.state.actions.filter((action) => action.player === "ai" && action.action === "check")).toHaveLength(2);
+    const aiActions = session.state.actions.filter((action) => action.player === "ai" && ["check", "bet", "raise", "all-in"].includes(action.action));
+    expect(aiActions).toHaveLength(2);
+    expect(aiActions[0]).toMatchObject({ street: "preflop", action: "check" });
+    expect(aiActions[1].street).toBe("flop");
     random.mockRestore();
   });
 });
