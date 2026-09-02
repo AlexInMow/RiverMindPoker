@@ -82,9 +82,47 @@ export interface PlayerProfile {
   pfr: number;
   threeBet: number;
   foldFrequency: number;
+  foldOpportunities: number;
+  foldToThreeBet: number;
+  foldToThreeBetOpportunities: number;
+  foldToCBet: number;
+  foldToCBetOpportunities: number;
+  flopCBet: number;
+  flopCBetOpportunities: number;
+  turnBarrel: number;
+  turnBarrelOpportunities: number;
+  riverAggression: number;
+  riverOpportunities: number;
+  checkRaise: number;
+  checkRaiseOpportunities: number;
+  wentToShowdown: number;
+  wonAtShowdown: number;
   aggressionFactor: number;
   averageBetSize: number;
   tendencies: string[];
+}
+
+export interface CompactHandAction {
+  player: PlayerId;
+  street: Street;
+  action: ActionType;
+  amount?: number;
+}
+
+export interface AdaptiveHandSummary {
+  handNumber: number;
+  button: PlayerId;
+  pot: number;
+  winner: PlayerId | "split";
+  reachedShowdown: boolean;
+  actions: CompactHandAction[];
+  playerLineTags: string[];
+}
+
+export interface RepeatedPlayerPattern {
+  pattern: string;
+  occurrences: number;
+  handNumbers: number[];
 }
 
 export interface SessionStats extends PlayerProfile {
@@ -141,7 +179,8 @@ export interface AIVisibleGameState {
   position: "button/small blind" | "big blind";
   button: PlayerId;
   currentHandActions: PlayerAction[];
-  recentHandSummaries: string[];
+  recentHands: AdaptiveHandSummary[];
+  repeatedPlayerPatterns: RepeatedPlayerPattern[];
   legalActions: LegalAction[];
   playerProfile: PlayerProfile;
 }

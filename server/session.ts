@@ -4,6 +4,7 @@ import type {
   AIDecision,
   AITrace,
   AIVisibleGameState,
+  AdaptiveHandSummary,
   DebugInfo,
   GameConfig,
   HandHistory,
@@ -13,6 +14,7 @@ import type {
 import { dummyDecision } from "./ai/dummyBot";
 import { OpenAIBot } from "./ai/openaiBot";
 import { validateAndNormalizeDecision } from "./ai/validation";
+import { buildAdaptiveHandSummary, findRepeatedPlayerPatterns } from "./adaptiveHistory";
 import { StatsTracker, type ObservedAction } from "./stats";
 
 export interface Session {
@@ -20,6 +22,7 @@ export interface Session {
   state: EngineState;
   tracker: StatsTracker;
   completedHands: HandHistory[];
+  adaptiveHands: AdaptiveHandSummary[];
   finalizedHands: Set<number>;
   aiThinking: boolean;
   lastTrace?: AITrace;
@@ -36,6 +39,7 @@ export class SessionStore {
       state: createGame(config),
       tracker: new StatsTracker(config.startingStack, config.bigBlind),
       completedHands: [],
+      adaptiveHands: [],
       finalizedHands: new Set(),
       aiThinking: false,
     };
@@ -69,6 +73,8 @@ export class SessionStore {
     if (!state.result || session.finalizedHands.has(state.handNumber)) return;
     session.finalizedHands.add(state.handNumber);
     session.tracker.finish(state);
+    session.adaptiveHands.unshift(buildAdaptiveHandSummary(state));
+    session.adaptiveHands = session.adaptiveHands.slice(0, 25);
     session.completedHands.unshift({ handNumber: state.handNumber, lines: [...state.handLog], result: structuredClone(state.result) });
   }
 
@@ -140,7 +146,8 @@ export class SessionStore {
       || action.type === "raise"
       || (action.type === "all-in" && allInTarget > state.currentBet);
     const amount = action.type === "all-in" ? allInTarget : action.amount ?? 0;
-    return { player, action: action.type, street: state.street, amount, isAggressive };
+    const facingBet = state.currentBet > playerState.streetBet;
+    return { player, action: action.type, street: state.street, amount, isAggressive, facingBet };
   }
 
   aiVisibleState(session: Session): AIVisibleGameState {
@@ -158,7 +165,8 @@ export class SessionStore {
       position: state.button === "ai" ? "button/small blind" : "big blind",
       button: state.button,
       currentHandActions: [...state.actions],
-      recentHandSummaries: session.completedHands.slice(0, 6).map((hand) => `Hand #${hand.handNumber}: ${hand.result.summary}`),
+      recentHands: session.adaptiveHands,
+      repeatedPlayerPatterns: findRepeatedPlayerPatterns(session.adaptiveHands),
       legalActions: getLegalActions(state, "ai"),
       playerProfile: session.tracker.profile(),
     };

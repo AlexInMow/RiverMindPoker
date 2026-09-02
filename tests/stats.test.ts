@@ -15,12 +15,12 @@ const config: GameConfig = {
   debugMode: false,
 };
 
-type TestAction = [player: PlayerId, action: ActionType, isAggressive: boolean, street?: Street];
+type TestAction = [player: PlayerId, action: ActionType, isAggressive: boolean, street?: Street, facingBet?: boolean];
 
 function profileFor(actions: TestAction[]) {
   const tracker = new StatsTracker(config.startingStack, config.bigBlind);
-  for (const [player, action, isAggressive, street = "preflop"] of actions) {
-    tracker.observe({ player, action, street, isAggressive, amount: 200 });
+  for (const [player, action, isAggressive, street = "preflop", facingBet = false] of actions) {
+    tracker.observe({ player, action, street, isAggressive, facingBet, amount: 200 });
   }
   const completedHand = createGame(config, () => 0);
   applyAction(completedHand, "human", { type: "fold" });
@@ -92,5 +92,62 @@ describe("player preflop statistics", () => {
     ]);
     expect(profile).toMatchObject({ vpip: 100, pfr: 0, threeBet: 0 });
     expect(profile.aggressionFactor).toBe(0);
+  });
+
+  it("uses every faced bet as the denominator for fold frequency", () => {
+    const profile = profileFor([
+      ["human", "fold", false, "flop", true],
+      ["human", "call", false, "turn", true],
+    ]);
+    expect(profile.foldOpportunities).toBe(2);
+    expect(profile.foldFrequency).toBe(50);
+  });
+
+  it("counts fold-to-3bet only when the human faces the third preflop bet level", () => {
+    const folded = profileFor([
+      ["human", "raise", true],
+      ["ai", "raise", true],
+      ["human", "fold", false, "preflop", true],
+    ]);
+    expect(folded).toMatchObject({ foldToThreeBet: 100, foldToThreeBetOpportunities: 1 });
+
+    const foldedToOpen = profileFor([
+      ["ai", "raise", true],
+      ["human", "fold", false, "preflop", true],
+    ]);
+    expect(foldedToOpen).toMatchObject({ foldToThreeBet: 0, foldToThreeBetOpportunities: 0 });
+  });
+
+  it("tracks fold-to-cbet from the preflop aggressor", () => {
+    const profile = profileFor([
+      ["ai", "raise", true],
+      ["human", "call", false, "preflop", true],
+      ["human", "check", false, "flop"],
+      ["ai", "bet", true, "flop"],
+      ["human", "fold", false, "flop", true],
+    ]);
+    expect(profile).toMatchObject({ foldToCBet: 100, foldToCBetOpportunities: 1 });
+  });
+
+  it("tracks flop c-bet followed by a turn barrel", () => {
+    const profile = profileFor([
+      ["human", "raise", true],
+      ["ai", "call", false, "preflop", true],
+      ["ai", "check", false, "flop"],
+      ["human", "bet", true, "flop"],
+      ["ai", "call", false, "flop", true],
+      ["ai", "check", false, "turn"],
+      ["human", "bet", true, "turn"],
+    ]);
+    expect(profile).toMatchObject({ flopCBet: 100, flopCBetOpportunities: 1, turnBarrel: 100, turnBarrelOpportunities: 1 });
+  });
+
+  it("tracks check-raises and river aggression per reached opportunity", () => {
+    const profile = profileFor([
+      ["human", "check", false, "river"],
+      ["ai", "bet", true, "river"],
+      ["human", "raise", true, "river", true],
+    ]);
+    expect(profile).toMatchObject({ checkRaise: 100, checkRaiseOpportunities: 1, riverAggression: 100, riverOpportunities: 1 });
   });
 });
