@@ -21,9 +21,23 @@ function App() {
 
   useEffect(() => { document.documentElement.lang = language; }, [language]);
 
+  useEffect(() => {
+    const sessionId = localStorage.getItem("rivermind:active-session");
+    if (!sessionId) return;
+    setBusy(true);
+    void api.getSession(sessionId)
+      .then(setGame)
+      .catch(() => localStorage.removeItem("rivermind:active-session"))
+      .finally(() => setBusy(false));
+  }, []);
+
   const start = async (config: GameConfig) => {
     setBusy(true); setError(undefined);
-    try { setGame(await api.createSession(config)); }
+    try {
+      const session = await api.createSession(config);
+      localStorage.setItem("rivermind:active-session", session.sessionId);
+      setGame(session);
+    }
     catch (err) { setError(err instanceof Error ? err.message : t(language, "openError")); }
     finally { setBusy(false); }
   };
@@ -43,8 +57,14 @@ function App() {
 
   useEffect(() => {
     if (!game) return;
+    localStorage.setItem("rivermind:active-session", game.sessionId);
     localStorage.setItem("rivermind:last-session", JSON.stringify({ stats: game.stats, completedHands: game.completedHands }));
   }, [game]);
+
+  const leaveSession = () => {
+    localStorage.removeItem("rivermind:active-session");
+    setGame(null);
+  };
 
   useEffect(() => {
     if (!game?.aiThinking) return;
@@ -77,13 +97,12 @@ function App() {
   };
 
   if (!game) return <><Setup onStart={start} loading={busy} language={language} onLanguage={changeLanguage} />{error && <Toast message={error} onClose={() => setError(undefined)} />}</>;
-  const isBusted = game.players.human.stack === 0 || game.players.ai.stack === 0;
   return (
     <div className="game-shell">
       <header className="game-header">
         <div className="brand compact"><span className="brand-chip">R</span><span>RIVERMIND</span></div>
         <div className="game-meta"><span>{t(language, "hand")} <strong>#{game.handNumber}</strong></span><i /><span>{t(language, "blinds").toUpperCase()} <strong>{game.config.smallBlind} / {game.config.bigBlind}</strong></span><i /><span className={`api-state ${game.aiStatus}`}><b />{game.aiStatus === "connected" ? t(language, "apiConnected") : t(language, "apiOffline")}</span></div>
-        <div className="header-actions"><LanguageSwitch language={language} onChange={changeLanguage} /><button className="leave-table" onClick={() => setGame(null)}>{t(language, "leave")}</button></div>
+        <div className="header-actions"><LanguageSwitch language={language} onChange={changeLanguage} /><button className="leave-table" onClick={leaveSession}>{t(language, "leave")}</button></div>
       </header>
       <div className={`game-layout ${guideOpen ? "guide-open" : ""}`}>
         <HandGuide language={language} onClose={() => setGuideOpen(false)} />
@@ -94,7 +113,7 @@ function App() {
           <PokerTable game={game} language={language} />
           <Controls game={game} language={language} disabled={busy || game.aiThinking || (game.street !== "complete" && game.actor !== "human")} onAction={act} onNext={nextHand} />
           {game.street === "complete" && game.config.coachMode && <button className="coach-button" disabled={busy} onClick={explain}>◇ {t(language, "why")}</button>}
-          {isBusted && <SessionComplete humanWon={game.players.human.stack > 0} language={language} onNewSession={() => setGame(null)} />}
+          {game.matchOver && <SessionComplete humanWon={game.players.ai.stack === 0} language={language} onNewSession={leaveSession} />}
         </section>
         <SidePanel game={game} language={language} />
       </div>

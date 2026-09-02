@@ -3,8 +3,10 @@ import { rankValue } from "./cards";
 
 export interface HandScore {
   category: number;
+  rankValues: number[];
   kickers: number[];
   name: string;
+  bestFive: Card[];
   cards: Card[];
 }
 
@@ -29,8 +31,41 @@ function straightHigh(values: number[]): number | null {
   return null;
 }
 
+function assertValidCards(cards: Card[], expected?: number): void {
+  if (expected !== undefined && cards.length !== expected) throw new Error(`Expected exactly ${expected} cards`);
+  if (cards.some((card) => !/^[2-9TJQKA][shdc]$/.test(card))) throw new Error("Invalid card in poker hand");
+  if (new Set(cards).size !== cards.length) throw new Error("Duplicate card in poker hand");
+}
+
+function orderedBestFive(cards: Card[], category: number, rankValues: number[]): Card[] {
+  let orderedRanks: number[];
+  if (category === 4 || category === 8) {
+    const high = rankValues[0];
+    orderedRanks = high === 5 ? [5, 4, 3, 2, 14] : [high, high - 1, high - 2, high - 3, high - 4];
+  } else if (category === 7) {
+    orderedRanks = [rankValues[0], rankValues[0], rankValues[0], rankValues[0], rankValues[1]];
+  } else if (category === 6) {
+    orderedRanks = [rankValues[0], rankValues[0], rankValues[0], rankValues[1], rankValues[1]];
+  } else if (category === 3) {
+    orderedRanks = [rankValues[0], rankValues[0], rankValues[0], rankValues[1], rankValues[2]];
+  } else if (category === 2) {
+    orderedRanks = [rankValues[0], rankValues[0], rankValues[1], rankValues[1], rankValues[2]];
+  } else if (category === 1) {
+    orderedRanks = [rankValues[0], rankValues[0], rankValues[1], rankValues[2], rankValues[3]];
+  } else {
+    orderedRanks = rankValues;
+  }
+
+  const remaining = [...cards];
+  return orderedRanks.map((rank) => {
+    const index = remaining.findIndex((card) => rankValue(card) === rank);
+    if (index < 0) throw new Error("Could not construct best five cards");
+    return remaining.splice(index, 1)[0];
+  });
+}
+
 export function evaluateFive(cards: Card[]): HandScore {
-  if (cards.length !== 5) throw new Error("evaluateFive requires exactly five cards");
+  assertValidCards(cards, 5);
   const values = cards.map(rankValue).sort((a, b) => b - a);
   const flush = cards.every((card) => card[1] === cards[0][1]);
   const straight = straightHigh(values);
@@ -51,7 +86,8 @@ export function evaluateFive(cards: Card[]): HandScore {
     [category, kickers] = [2, [...pairs, groups[2][0]]];
   } else if (groups[0][1] === 2) [category, kickers] = [1, [groups[0][0], ...groups.slice(1).map(([v]) => v).sort((a, b) => b - a)]];
 
-  return { category, kickers, name: NAMES[category], cards };
+  const bestFive = orderedBestFive(cards, category, kickers);
+  return { category, rankValues: kickers, kickers, name: NAMES[category], bestFive, cards: bestFive };
 }
 
 export function compareScores(a: HandScore, b: HandScore): number {
@@ -80,10 +116,13 @@ export function getShowdownDetail(winner: HandScore, loser: HandScore): Showdown
     case 7: reason = decisiveIndex === 0 ? "higher-quads" : "kicker"; break;
     default: reason = "higher-straight-flush";
   }
-  return { reason, decisiveRank: winner.kickers[decisiveIndex] };
+  const winningRank = winner.kickers[decisiveIndex];
+  const losingRank = loser.kickers[decisiveIndex];
+  return { reason, category: winner.category, decisiveIndex, decisiveRank: winningRank, winningRank, losingRank };
 }
 
 export function evaluateHand(cards: Card[]): HandScore {
   if (cards.length < 5 || cards.length > 7) throw new Error("A poker hand must contain 5 to 7 cards");
+  assertValidCards(cards);
   return combinations(cards, 5).map(evaluateFive).reduce((best, score) => compareScores(score, best) > 0 ? score : best);
 }

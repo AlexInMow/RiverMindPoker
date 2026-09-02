@@ -2,6 +2,14 @@
 
 RiverMind is a local heads-up No-Limit Texas Hold'em app for macOS. A deterministic TypeScript engine is the dealer and arbiter; OpenAI (or the offline DummyBot) is only a player and receives a deliberately restricted `AIVisibleGameState`.
 
+## Card dealing and fairness
+
+The backend poker engine is the only source of truth for cards. For every hand it creates a new standard 52-card deck and shuffles it exactly once with Fisher–Yates. Each swap index comes from Node.js `crypto.randomInt()`, which provides an unbiased cryptographically secure integer without modulo reduction.
+
+Cards are then removed sequentially from the end of the shuffled deck. In heads-up play, the button/small blind receives the first hole card, the big blind receives the second, and this order repeats for the second hole card. The engine burns one card before the flop, one before the turn, and one before the river. Burn cards stay out of the normal player and AI projections. The explicitly enabled local developer mode can still display private engine diagnostics for auditing.
+
+Every public engine mutation verifies that the remaining deck, both players' hole cards, the board, and burn cards contain exactly the original 52 unique cards. It also verifies one shuffle per hand ID, immutable hole cards, and a forward-only draw counter. The React frontend displays server-projected state and cannot create, shuffle, deal, or replace cards.
+
 ## MVP features
 
 - Complete heads-up hands from blinds through showdown, including folds, checks, calls, bets, raises, effective all-ins, split pots, button rotation, and future-facing side-pot layers.

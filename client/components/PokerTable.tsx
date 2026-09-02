@@ -3,6 +3,7 @@ import { PlayingCard } from "./Card";
 import { actionAnnouncement, resultText, strategyInfo, streetLabel, t } from "../i18n";
 
 export function PokerTable({ game, language }: { game: PublicGameState; language: Language }) {
+  const displayPot = game.result?.pot ?? game.pot;
   const aiCards = game.players.ai.cards;
   const lastAIAction = [...game.actions].reverse().find((action) => action.player === "ai" && ["fold", "check", "call", "bet", "raise", "all-in"].includes(action.action));
   return (
@@ -26,7 +27,7 @@ export function PokerTable({ game, language }: { game: PublicGameState; language
         </div>}
 
         <div className="center-table">
-          <div className="pot-label"><span>{t(language, "pot")}</span><strong>{game.pot.toLocaleString(language === "ru" ? "ru-RU" : "en-US")}</strong></div>
+          <div className="pot-label"><span>{t(language, "pot")}</span><strong>{displayPot.toLocaleString(language === "ru" ? "ru-RU" : "en-US")}</strong></div>
           <div className="board-cards">
             {[0, 1, 2, 3, 4].map((index) => game.board[index]
               ? <PlayingCard key={game.board[index]} card={game.board[index]} delay={index * 90} />

@@ -1,4 +1,4 @@
-import type { HandResult, Language, PlayerAction, Strategy, Street } from "../shared/types";
+import type { EvaluatedHandSummary, HandResult, Language, PlayerAction, Strategy, Street } from "../shared/types";
 
 const en = {
   headsUp: "HEADS-UP NO-LIMIT HOLD'EM", hero1: "Read the table.", hero2: "Not the cards.",
@@ -64,29 +64,98 @@ function rankLabel(rank: number): string {
   return ({ 14: "A", 13: "K", 12: "Q", 11: "J", 10: "10" } as Record<number, string>)[rank] ?? String(rank);
 }
 
+const ruRankPlural: Record<number, string> = {
+  14: "тузов", 13: "королей", 12: "дам", 11: "валетов", 10: "десяток", 9: "девяток", 8: "восьмёрок", 7: "семёрок", 6: "шестёрок", 5: "пятёрок", 4: "четвёрок", 3: "троек", 2: "двоек",
+};
+const ruRankNominativePlural: Record<number, string> = {
+  14: "тузы", 13: "короли", 12: "дамы", 11: "валеты", 10: "десятки", 9: "девятки", 8: "восьмёрки", 7: "семёрки", 6: "шестёрки", 5: "пятёрки", 4: "четвёрки", 3: "тройки", 2: "двойки",
+};
+const ruRankAfterTo: Record<number, string> = {
+  14: "туза", 13: "короля", 12: "дамы", 11: "валета", 10: "десятки", 9: "девятки", 8: "восьмёрки", 7: "семёрки", 6: "шестёрки", 5: "пятёрки", 4: "четвёрки", 3: "тройки", 2: "двойки",
+};
+const enRankPlural: Record<number, string> = {
+  14: "aces", 13: "kings", 12: "queens", 11: "jacks", 10: "tens", 9: "nines", 8: "eights", 7: "sevens", 6: "sixes", 5: "fives", 4: "fours", 3: "threes", 2: "twos",
+};
+const enRankName: Record<number, string> = {
+  14: "ace", 13: "king", 12: "queen", 11: "jack", 10: "ten", 9: "nine", 8: "eight", 7: "seven", 6: "six", 5: "five", 4: "four", 3: "three", 2: "two",
+};
+
+export function handDescription(score: EvaluatedHandSummary | undefined, fallbackName: string | undefined, language: Language): string {
+  if (!score) return handName(fallbackName, language);
+  const [first, second] = score.rankValues;
+  if (language === "ru") {
+    switch (score.category) {
+      case 0: return `Старшая карта: ${rankLabel(first)}`;
+      case 1: return `Пара ${ruRankPlural[first]}`;
+      case 2: return `Две пары: ${ruRankNominativePlural[first]} и ${ruRankNominativePlural[second]}`;
+      case 3: return `Тройка ${ruRankPlural[first]}`;
+      case 4: return `Стрит до ${ruRankAfterTo[first]}`;
+      case 5: return `Флеш до ${ruRankAfterTo[first]}`;
+      case 6: return `Фулл-хаус: ${ruRankNominativePlural[first]} фулл ${ruRankPlural[second]}`;
+      case 7: return `Каре ${ruRankPlural[first]}`;
+      default: return first === 14 ? "Роял-флеш" : `Стрит-флеш до ${ruRankAfterTo[first]}`;
+    }
+  }
+  switch (score.category) {
+    case 0: return `High card: ${enRankName[first]}`;
+    case 1: return `Pair of ${enRankPlural[first]}`;
+    case 2: return `Two pair: ${enRankPlural[first]} and ${enRankPlural[second]}`;
+    case 3: return `Three ${enRankPlural[first]}`;
+    case 4: return `Straight to ${enRankName[first]}`;
+    case 5: return `Flush to ${enRankName[first]}`;
+    case 6: return `Full house: ${enRankPlural[first]} full of ${enRankPlural[second]}`;
+    case 7: return `Four ${enRankPlural[first]}`;
+    default: return first === 14 ? "Royal flush" : `Straight flush to ${enRankName[first]}`;
+  }
+}
+
 function showdownSuffix(result: HandResult, language: Language): string {
   if (!result.showdownDetail) return "";
-  const rank = rankLabel(result.showdownDetail.decisiveRank);
-  if (result.showdownDetail.reason === "kicker") return language === "ru" ? `, старший кикер ${rank}` : `, ${rank} kicker`;
-  const labels = language === "ru" ? {
-    "higher-card": "по старшей карте", "higher-pair": "по старшей паре", "higher-two-pair": "по старшим двум парам", "higher-trips": "по старшей тройке", "higher-straight": "по старшему стриту", "higher-flush": "по старшему флешу", "higher-full-house": "по старшему фулл-хаусу", "higher-quads": "по старшему каре", "higher-straight-flush": "по старшему стрит-флешу",
-  } : {
-    "higher-card": "higher card", "higher-pair": "higher pair", "higher-two-pair": "higher two pair", "higher-trips": "higher three of a kind", "higher-straight": "higher straight", "higher-flush": "higher flush", "higher-full-house": "higher full house", "higher-quads": "higher four of a kind", "higher-straight-flush": "higher straight flush",
-  };
-  const label = labels[result.showdownDetail.reason];
-  return language === "ru" ? `, ${label} (${rank})` : `, ${label} (${rank})`;
+  const detail = result.showdownDetail;
+  const winning = rankLabel(detail.winningRank ?? detail.decisiveRank);
+  const losing = detail.losingRank === undefined ? "" : rankLabel(detail.losingRank);
+  const comparison = losing ? `${winning} > ${losing}` : winning;
+  const category = detail.category;
+  const index = detail.decisiveIndex;
+
+  if (language === "ru") {
+    let label: string;
+    if (category === 1 && index > 0) label = index === 1 ? "старший кикер" : `${index}-й кикер`;
+    else if (category === 2 && index === 2) label = "кикер";
+    else if (category === 3 && index > 0) label = index === 1 ? "старший кикер" : "2-й кикер";
+    else if (category === 7 && index === 1) label = "кикер";
+    else if ((category === 0 || category === 5) && index > 0) label = `${index + 1}-я карта`;
+    else label = ({
+      "higher-card": "старшая карта", "higher-pair": "ранг пары", "higher-two-pair": index === 0 ? "старшая пара" : "младшая пара", "higher-trips": "ранг тройки", "higher-straight": "старшая карта стрита", "higher-flush": "старшая карта флеша", "higher-full-house": index === 0 ? "тройка фулл-хауса" : "пара фулл-хауса", "higher-quads": "ранг каре", "higher-straight-flush": "старшая карта стрит-флеша", kicker: "кикер",
+    } as const)[detail.reason];
+    return ` — ${label}: ${comparison}`;
+  }
+
+  let label: string;
+  if (category === 1 && index > 0) label = index === 1 ? "top kicker" : `${index}${index === 2 ? "nd" : "rd"} kicker`;
+  else if (category === 2 && index === 2) label = "kicker";
+  else if (category === 3 && index > 0) label = index === 1 ? "top kicker" : "second kicker";
+  else if (category === 7 && index === 1) label = "kicker";
+  else if ((category === 0 || category === 5) && index > 0) label = `${["first", "second", "third", "fourth", "fifth"][index]} card`;
+  else label = ({
+    "higher-card": "high card", "higher-pair": "pair rank", "higher-two-pair": index === 0 ? "higher pair" : "lower pair", "higher-trips": "trip rank", "higher-straight": "straight high card", "higher-flush": "flush high card", "higher-full-house": index === 0 ? "full-house trips" : "full-house pair", "higher-quads": "quad rank", "higher-straight-flush": "straight-flush high card", kicker: "kicker",
+  } as const)[detail.reason];
+  return ` — ${label}: ${comparison}`;
 }
 
 export function resultText(result: HandResult, language: Language): string {
   const pot = result.pot.toLocaleString(language === "ru" ? "ru-RU" : "en-US").replace(/\u00a0/g, " ");
-  if (result.winners.length === 2) return language === "ru" ? `Банк ${pot} разделён — ${handName(result.humanHand, language)}` : `Split pot ${pot} — ${result.humanHand}`;
+  if (result.winners.length === 2) {
+    const description = handDescription(result.humanScore, result.humanHand, language);
+    return language === "ru" ? `Банк ${pot} разделён: одинаковая лучшая пятёрка — ${description}` : `Split pot ${pot}: identical best five — ${description}`;
+  }
   const humanWins = result.winners[0] === "human";
   const winner = humanWins ? (language === "ru" ? "Вы" : "You") : "AI";
   if (!result.humanHand) return language === "ru" ? `${winner} ${humanWins ? "забираете" : "забирает"} банк ${pot} — соперник сбросил карты` : `${winner} wins pot ${pot} — opponent folded`;
-  const hand = handName(humanWins ? result.humanHand : result.aiHand, language);
+  const hand = handDescription(humanWins ? result.humanScore : result.aiScore, humanWins ? result.humanHand : result.aiHand, language);
   return language === "ru"
     ? `${winner} ${humanWins ? "выигрываете" : "выигрывает"} ${pot}: ${hand}${showdownSuffix(result, language)}`
-    : `${winner} wins ${pot}: ${hand}${showdownSuffix(result, language)}`;
+    : `${winner} ${humanWins ? "win" : "wins"} ${pot}: ${hand}${showdownSuffix(result, language)}`;
 }
 
 const playerRu = (name: string) => name === "You" ? "Вы" : "AI";
@@ -103,11 +172,12 @@ export function translateLog(line: string, language: Language): string {
   if ((match = line.match(/^(You|AI) raises to (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "повышаете" : "повышает"} до ${match[2]}`;
   if ((match = line.match(/^(You|AI) is all-in to (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "идёте" : "идёт"} олл-ин до ${match[2]}`;
   if ((match = line.match(/^(You|AI) calls all-in for (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "коллируете" : "коллирует"} олл-ин на ${match[2]}`;
+  if ((match = line.match(/^Uncalled (\d+) returned to (You|AI)$/))) return `Непокрытая ставка ${match[1]} возвращена: ${playerRu(match[2])}`;
   if ((match = line.match(/^Uncalled (\d+) returned to (You|AI)$/))) return `Непринятые ${match[1]} возвращены: ${playerRu(match[2])}`;
   if ((match = line.match(/^(Flop|Turn|River): (.+)$/))) return `${({ Flop: "Флоп", Turn: "Тёрн", River: "Ривер" } as Record<string, string>)[match[1]]}: ${match[2]}`;
   if ((match = line.match(/^Showdown: You (.+) · AI (.+)$/))) return `Вскрытие: Вы ${match[1]} · AI ${match[2]}`;
-  if ((match = line.match(/^(You|AI) wins (\d+) \(opponent folded\)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "забираете" : "забирает"} ${match[2]} — соперник сбросил карты`;
-  if ((match = line.match(/^(You|AI) wins (\d+) with (.+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "выигрываете" : "выигрывает"} ${match[2]}: ${handName(match[3], language)}`;
+  if ((match = line.match(/^(You (?:win|wins)|AI wins) (\d+) \(opponent folded\)$/))) return `${playerRu(match[1].startsWith("You") ? "You" : "AI")} ${match[1].startsWith("You") ? "забираете" : "забирает"} ${match[2]} — соперник сбросил карты`;
+  if ((match = line.match(/^(You (?:win|wins)|AI wins) (\d+) with (.+)$/))) return `${playerRu(match[1].startsWith("You") ? "You" : "AI")} ${match[1].startsWith("You") ? "выигрываете" : "выигрывает"} ${match[2]}: ${handName(match[3], language)}`;
   if ((match = line.match(/^Split pot — both players have (.+)$/))) return `Банк разделён — у обоих ${handName(match[1], language)}`;
   return line;
 }

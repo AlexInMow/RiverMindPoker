@@ -3,6 +3,7 @@ import type { GameConfig } from "../shared/types";
 import { SessionStore } from "../server/session";
 import { validateAndNormalizeDecision } from "../server/ai/validation";
 import { applyAction } from "../poker-engine/game";
+import { createDeck } from "../poker-engine/cards";
 
 const config: GameConfig = {
   language: "ru", startingStack: 10000, smallBlind: 50, bigBlind: 100, strategy: "adaptive", difficulty: "expert", tableTalk: true, coachMode: false, debugMode: true,
@@ -53,7 +54,13 @@ describe("AI boundary", () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
     const store = new SessionStore();
     const session = store.create({ ...config, strategy: "nit" });
-    session.state.players.ai.cards = ["2c", "7d"];
+    const humanCards = new Set(session.state.players.human.cards);
+    const weakCards = (["2c", "7d", "3c", "8d"] as const).filter((card) => !humanCards.has(card)).slice(0, 2);
+    session.state.players.ai.cards = [...weakCards];
+    session.state.initialHoleCards.ai = [...weakCards];
+    session.state.deck = createDeck().filter((card) => !humanCards.has(card) && !weakCards.includes(card as typeof weakCards[number]));
+    session.state.cardsDrawn = 4;
+    session.state.validatedCardsDrawn = 4;
     applyAction(session.state, "human", { type: "call" });
     await store.runAI(session);
     expect(session.state.street).toBe("flop");

@@ -161,6 +161,7 @@ export class SessionStore {
     } : undefined;
     return {
       sessionId: session.id,
+      handId: state.handId,
       config: state.config,
       handNumber: state.handNumber,
       button: state.button,
@@ -169,6 +170,7 @@ export class SessionStore {
       pot: state.pot,
       currentBet: state.currentBet,
       actor: state.actor,
+      matchOver: state.matchOver,
       players: {
         human: { ...state.players.human, cards: [...state.players.human.cards] },
         ai: { ...state.players.ai, cards: reachedShowdown ? [...state.players.ai.cards] : null },

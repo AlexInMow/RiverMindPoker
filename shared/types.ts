@@ -52,6 +52,8 @@ export interface HandResult {
   summary: string;
   humanHand?: string;
   aiHand?: string;
+  humanScore?: EvaluatedHandSummary;
+  aiScore?: EvaluatedHandSummary;
   showdownDetail?: ShowdownDetail;
   payouts: Record<PlayerId, number>;
 }
@@ -60,7 +62,18 @@ export type ShowdownReason = "higher-card" | "higher-pair" | "higher-two-pair" |
 
 export interface ShowdownDetail {
   reason: ShowdownReason;
+  category: number;
+  decisiveIndex: number;
   decisiveRank: number;
+  winningRank: number;
+  losingRank: number;
+}
+
+export interface EvaluatedHandSummary {
+  category: number;
+  name: string;
+  rankValues: number[];
+  bestFive: Card[];
 }
 
 export interface PlayerProfile {
@@ -86,6 +99,7 @@ export interface SessionStats extends PlayerProfile {
 
 export interface PublicGameState {
   sessionId: string;
+  handId: string;
   config: GameConfig;
   handNumber: number;
   button: PlayerId;
@@ -94,6 +108,7 @@ export interface PublicGameState {
   pot: number;
   currentBet: number;
   actor: PlayerId | null;
+  matchOver: boolean;
   players: Record<PlayerId, PlayerPublicState>;
   legalActions: LegalAction[];
   actions: PlayerAction[];
