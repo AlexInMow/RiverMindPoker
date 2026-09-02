@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, assertChipAccounting, createGame, getLegalActions } from "../poker-engine/game";
+import { applyAction, assertChipAccounting, createGame, getLegalActions, startNextHand } from "../poker-engine/game";
 import type { GameConfig } from "../shared/types";
+import { StatsTracker } from "../server/stats";
+import { SessionStore } from "../server/session";
 
 const config: GameConfig = {
   language: "ru", startingStack: 1_000, smallBlind: 50, bigBlind: 100,
@@ -30,12 +32,48 @@ describe("poker engine betting regressions", () => {
     expect(game.currentBet).toBe(350);
     expect(game.minRaise).toBe(200);
     expect(game.actions.at(-1)).toMatchObject({ player: "ai", action: "all-in", amount: 350 });
+    expect(game.actions.at(-1)).toMatchObject({ effectiveAmount: 350, aggressive: true });
     expect(getLegalActions(game, "human").map((action) => action.type)).toEqual(["fold", "call", "all-in"]);
 
     applyAction(game, "human", { type: "call" });
     expect(game.street).toBe("complete");
     expect(game.players.human.stack + game.players.ai.stack).toBe(2_000);
     expect(() => applyAction(game, "human", { type: "call" })).toThrow(/turn/);
+  });
+
+  it("classifies an all-in consisting only of uncallable excess as a non-aggressive call", () => {
+    const store = new SessionStore();
+    const session = store.create(config, () => 0);
+    const game = session.state;
+    applyAction(game, "human", { type: "fold" });
+    startNextHand(game, () => 0);
+    game.players.ai.stack = 250;
+    game.players.human.stack = 1_600;
+    assertChipAccounting(game, "effective all-in fixture");
+
+    applyAction(game, "ai", { type: "all-in" });
+    store.act(session, { type: "all-in" });
+    const humanAction = game.actions.find((action) => action.player === "human" && action.action === "all-in")!;
+    expect(humanAction).toMatchObject({ amount: 1_700, effectiveAmount: 300, aggressive: false });
+
+    expect(session.tracker.profile()).toMatchObject({ vpip: 100, pfr: 0, threeBet: 0, aggressionFactor: 0 });
+    expect(session.adaptiveHands[0].playerLineTags).not.toContain("preflop-aggression");
+  });
+
+  it("uses only the covered portion of an aggressive all-in for statistical sizing", () => {
+    const game = createGame(config, () => 0);
+    game.players.human.stack = 1_650;
+    game.players.ai.stack = 200;
+    assertChipAccounting(game, "covered all-in fixture");
+    applyAction(game, "human", { type: "all-in" });
+    const action = game.actions.at(-1)!;
+    expect(action).toMatchObject({ amount: 1_700, effectiveAmount: 300, aggressive: true });
+    applyAction(game, "ai", { type: "call" });
+
+    const tracker = new StatsTracker(config.startingStack, config.bigBlind);
+    tracker.observe({ player: "human", action: "all-in", street: "preflop", amount: action.effectiveAmount, isAggressive: true, facingBet: true });
+    tracker.finish(game);
+    expect(tracker.profile()).toMatchObject({ pfr: 100, threeBet: 0, averageBetSize: 300 });
   });
 
   it("rejects a raise below the current full-raise minimum without mutating state", () => {

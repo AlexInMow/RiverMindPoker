@@ -163,7 +163,9 @@ describe("player preflop statistics", () => {
     tracker.finish(showdown);
     expect(tracker.profile()).toMatchObject({
       wentToShowdown: 100,
+      wentToShowdownOpportunities: 1,
       wonAtShowdown: showdown.result!.winners.includes("human") ? 100 : 0,
+      wonAtShowdownOpportunities: 1,
     });
   });
 });

@@ -31,8 +31,8 @@ export function deriveBoardMetrics(state: EngineState): BoardMetrics {
   const maxSuitCount = Math.max(0, ...suitCounts.values());
   const boardConnectedness = connectedness(ranks);
   const paired = maxRankCount >= 2;
-  const monotone = state.board.length >= 3 && maxSuitCount === state.board.length;
-  const twoTone = state.board.length >= 3 && maxSuitCount === state.board.length - 1;
+  const monotone = state.board.length >= 3 && suitCounts.size === 1;
+  const twoTone = state.board.length >= 3 && suitCounts.size === 2;
   const wetness = state.board.length < 3 ? 0 : Math.min(1, round(
     (maxSuitCount >= 3 ? 0.35 : maxSuitCount === 2 ? 0.18 : 0)
     + (boardConnectedness >= 4 ? 0.4 : boardConnectedness === 3 ? 0.25 : 0)
@@ -59,9 +59,11 @@ function preflopBetLevel(actions: PlayerAction[]): number {
   let target = 0;
   for (const action of actions.filter((item) => item.street === "preflop")) {
     if (action.action === "big-blind") target = Math.max(target, action.amount ?? 0);
-    if (action.action === "raise" || action.action === "bet" || (action.action === "all-in" && (action.amount ?? 0) > target)) {
+    const isAggressive = action.aggressive
+      ?? (action.action === "raise" || action.action === "bet" || (action.action === "all-in" && (action.effectiveAmount ?? action.amount ?? 0) > target));
+    if (isAggressive) {
       level += 1;
-      target = Math.max(target, action.amount ?? target);
+      target = Math.max(target, action.effectiveAmount ?? action.amount ?? target);
     }
   }
   return level;
@@ -70,7 +72,14 @@ function preflopBetLevel(actions: PlayerAction[]): number {
 function compactLastAction(actions: PlayerAction[]): CompactHandAction | undefined {
   const action = [...actions].reverse().find((item) => playable.has(item.action));
   if (!action) return undefined;
-  return { player: action.player, street: action.street as Street, action: action.action as CompactHandAction["action"], amount: action.amount };
+  return {
+    player: action.player,
+    street: action.street as Street,
+    action: action.action as CompactHandAction["action"],
+    amount: action.amount,
+    effectiveAmount: action.effectiveAmount,
+    aggressive: action.aggressive,
+  };
 }
 
 export function deriveAIContext(state: EngineState): {
@@ -83,6 +92,7 @@ export function deriveAIContext(state: EngineState): {
 } {
   const amountToCall = Math.min(state.players.ai.stack, Math.max(0, state.currentBet - state.players.ai.streetBet));
   const effectiveStack = Math.min(state.players.ai.stack, state.players.human.stack);
+  const betLevel = preflopBetLevel(state.actions);
   return {
     amountToCall,
     potOdds: amountToCall ? round(amountToCall / (state.pot + amountToCall)) : 0,
@@ -91,8 +101,8 @@ export function deriveAIContext(state: EngineState): {
     boardMetrics: deriveBoardMetrics(state),
     contextMetrics: {
       isInPositionPostflop: state.button === "ai",
-      facingAggression: amountToCall > 0,
-      preflopBetLevel: preflopBetLevel(state.actions),
+      facingAggression: amountToCall > 0 && (state.street !== "preflop" || betLevel > 1),
+      preflopBetLevel: betLevel,
       currentBet: state.currentBet,
       aiStreetBet: state.players.ai.streetBet,
       playerStreetBet: state.players.human.streetBet,

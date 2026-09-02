@@ -48,7 +48,8 @@ function Stats({ game, language }: { game: PublicGameState; language: Language }
     [language === "ru" ? "Баррель тёрна" : "Turn barrel", sampledRate(stats.turnBarrel, stats.turnBarrelOpportunities)],
     [language === "ru" ? "Агрессия ривера" : "River aggression", sampledRate(stats.riverAggression, stats.riverOpportunities)],
     [language === "ru" ? "Чек-рейз" : "Check-raise", sampledRate(stats.checkRaise, stats.checkRaiseOpportunities)],
-    ["WTSD", `${stats.wentToShowdown}%`], ["W$SD", `${stats.wonAtShowdown}%`],
+    ["WTSD", sampledRate(stats.wentToShowdown, stats.wentToShowdownOpportunities)],
+    ["W$SD", sampledRate(stats.wonAtShowdown, stats.wonAtShowdownOpportunities)],
     [t(language, "netChips"), `${stats.netChips >= 0 ? "+" : ""}${stats.netChips}`], [language === "ru" ? "ББ / 100" : "BB / 100", stats.bbPer100],
   ];
   return <div className="stats-pane">

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { applyAction, createGame, getLegalActions, startNextHand, type EngineAction, type EngineState } from "../poker-engine/game";
+import type { RandomIndex } from "../poker-engine/cards";
 import type {
   AIDecision,
+  ActionType,
   AITrace,
   AIVisibleGameState,
   AdaptiveHandSummary,
@@ -15,6 +17,8 @@ import { dummyDecision } from "./ai/dummyBot";
 import { OpenAIBot } from "./ai/openaiBot";
 import { validateAndNormalizeDecision } from "./ai/validation";
 import { deriveAIContext } from "./ai/context";
+import { deriveAdaptivePolicy } from "./ai/adaptivePolicy";
+import { calibrateAdaptiveDecision } from "./ai/adaptiveGuard";
 import { buildAdaptiveHandSummary, findRepeatedPlayerPatterns } from "./adaptiveHistory";
 import { StatsTracker, type ObservedAction } from "./stats";
 
@@ -34,10 +38,10 @@ export class SessionStore {
   private sessions = new Map<string, Session>();
   readonly bot = new OpenAIBot();
 
-  create(config: GameConfig): Session {
+  create(config: GameConfig, randomIndex?: RandomIndex): Session {
     const session: Session = {
       id: randomUUID(),
-      state: createGame(config),
+      state: createGame(config, randomIndex),
       tracker: new StatsTracker(config.startingStack, config.bigBlind),
       completedHands: [],
       adaptiveHands: [],
@@ -55,9 +59,11 @@ export class SessionStore {
   }
 
   act(session: Session, action: EngineAction): void {
-    const observed = this.describeAction(session.state, "human", action);
+    const street = session.state.street;
+    const facingBet = session.state.currentBet > session.state.players.human.streetBet;
+    const actionIndex = session.state.actions.length;
     applyAction(session.state, "human", action);
-    session.tracker.observe(observed);
+    this.observeAppliedAction(session, "human", actionIndex, street, facingBet);
     this.finalizeIfNeeded(session);
     if (session.state.actor === "ai") void this.runAI(session);
   }
@@ -118,11 +124,18 @@ export class SessionStore {
             latencyMs: Date.now() - started,
           };
         }
+        const calibrated = calibrateAdaptiveDecision(decision, visible, session.state.config.strategy);
+        decision = calibrated.decision;
+        if (calibrated.adjustment && session.lastTrace) {
+          session.lastTrace.validation = `${session.lastTrace.validation}; ${calibrated.adjustment}`;
+        }
         session.tableTalk = decision.table_talk || undefined;
         const action: EngineAction = { type: decision.action, amount: decision.amount };
-        const observed = this.describeAction(session.state, "ai", action);
+        const street = session.state.street;
+        const facingBet = session.state.currentBet > session.state.players.ai.streetBet;
+        const actionIndex = session.state.actions.length;
         applyAction(session.state, "ai", action);
-        session.tracker.observe(observed);
+        this.observeAppliedAction(session, "ai", actionIndex, street, facingBet);
         this.finalizeIfNeeded(session);
         consecutiveActions += 1;
       }
@@ -140,20 +153,26 @@ export class SessionStore {
     }
   }
 
-  private describeAction(state: EngineState, player: PlayerId, action: EngineAction): ObservedAction {
-    const playerState = state.players[player];
-    const allInTarget = playerState.streetBet + playerState.stack;
-    const isAggressive = action.type === "bet"
-      || action.type === "raise"
-      || (action.type === "all-in" && allInTarget > state.currentBet);
-    const amount = action.type === "all-in" ? allInTarget : action.amount ?? 0;
-    const facingBet = state.currentBet > playerState.streetBet;
-    return { player, action: action.type, street: state.street, amount, isAggressive, facingBet };
+  private observeAppliedAction(session: Session, player: PlayerId, actionIndex: number, street: EngineState["street"], facingBet: boolean): void {
+    const recorded = session.state.actions[actionIndex];
+    if (!recorded || recorded.player !== player || !["fold", "check", "call", "bet", "raise", "all-in"].includes(recorded.action)) {
+      throw new Error("Engine did not record the applied player action");
+    }
+    session.tracker.observe({
+      player,
+      action: recorded.action as ActionType,
+      street,
+      amount: recorded.effectiveAmount ?? recorded.amount ?? 0,
+      isAggressive: recorded.aggressive ?? false,
+      facingBet,
+    } satisfies ObservedAction);
   }
 
   aiVisibleState(session: Session): AIVisibleGameState {
     const state = session.state;
     const context = deriveAIContext(state);
+    const playerProfile = session.tracker.profile();
+    const repeatedPlayerPatterns = findRepeatedPlayerPatterns(session.adaptiveHands);
     return {
       game: "Heads-Up No-Limit Texas Hold'em",
       handNumber: state.handNumber,
@@ -169,9 +188,10 @@ export class SessionStore {
       button: state.button,
       currentHandActions: [...state.actions],
       recentHands: session.adaptiveHands,
-      repeatedPlayerPatterns: findRepeatedPlayerPatterns(session.adaptiveHands),
+      repeatedPlayerPatterns,
+      counterStrategy: deriveAdaptivePolicy(playerProfile, repeatedPlayerPatterns),
       legalActions: getLegalActions(state, "ai"),
-      playerProfile: session.tracker.profile(),
+      playerProfile,
     };
   }
 

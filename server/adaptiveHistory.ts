@@ -5,14 +5,21 @@ const playableActions = new Set<ActionType>(["fold", "check", "call", "bet", "ra
 const isPlayableAction = (action: PlayerAction["action"]): action is ActionType => playableActions.has(action as ActionType);
 
 function aggressive(action: CompactHandAction, priorTarget: number): boolean {
-  return action.action === "bet" || action.action === "raise" || (action.action === "all-in" && (action.amount ?? 0) > priorTarget);
+  return action.aggressive ?? (action.action === "bet" || action.action === "raise" || (action.action === "all-in" && (action.effectiveAmount ?? action.amount ?? 0) > priorTarget));
 }
 
 export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummary {
   if (!state.result) throw new Error("Cannot summarize an unfinished hand");
   const actions = state.actions
     .filter((action) => isPlayableAction(action.action))
-    .map<CompactHandAction>((action) => ({ player: action.player, street: action.street, action: action.action as ActionType, amount: action.amount }));
+    .map<CompactHandAction>((action) => ({
+      player: action.player,
+      street: action.street,
+      action: action.action as ActionType,
+      amount: action.amount,
+      effectiveAmount: action.effectiveAmount,
+      aggressive: action.aggressive,
+    }));
 
   const targets: Partial<Record<Street, number>> = { preflop: state.config.bigBlind };
   let preflopLevel = 1;
@@ -51,7 +58,7 @@ export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummar
       if (action.player === "human" && action.street === "turn" && isAggressive && humanFlopCBet && noPriorStreetAggression) humanTurnBarrel = true;
       if (action.player === "human" && action.street === "river" && isAggressive) humanRiverAggression = true;
     }
-    if (isAggressive) targets[action.street] = action.amount ?? priorTarget;
+    if (isAggressive) targets[action.street] = action.effectiveAmount ?? action.amount ?? priorTarget;
   }
 
   const playerLineTags: string[] = [];

@@ -171,8 +171,14 @@ function assertEngineState(state: EngineState, context: string): void {
   assertCardIntegrity(state, context);
 }
 
-function record(state: EngineState, player: PlayerId, action: PlayerAction["action"], amount?: number): void {
-  state.actions.push({ player, street: state.street, action, amount, at: Date.now() });
+function record(
+  state: EngineState,
+  player: PlayerId,
+  action: PlayerAction["action"],
+  amount?: number,
+  semantics?: Pick<PlayerAction, "effectiveAmount" | "aggressive">,
+): void {
+  state.actions.push({ player, street: state.street, action, amount, ...semantics, at: Date.now() });
 }
 
 function postBlind(state: EngineState, id: PlayerId, amount: number, kind: "small-blind" | "big-blind"): void {
@@ -342,7 +348,7 @@ export function applyAction(state: EngineState, id: PlayerId, rawAction: EngineA
 
   if (action.type === "fold") {
     player.folded = true;
-    record(state, id, "fold");
+    record(state, id, "fold", undefined, { aggressive: false });
     state.handLog.push(`${playerName(id)} folds`);
     finishByFold(state, other(id));
     assertEngineState(state, "fold payout");
@@ -350,21 +356,23 @@ export function applyAction(state: EngineState, id: PlayerId, rawAction: EngineA
   }
 
   if (action.type === "check") {
-    record(state, id, "check");
+    record(state, id, "check", undefined, { aggressive: false });
     logLine = `${playerName(id)} checks`;
     state.acted.push(id);
   } else if (action.type === "call") {
     const paid = putChips(state, id, Math.max(0, state.currentBet - player.streetBet));
-    record(state, id, "call", paid);
+    record(state, id, "call", paid, { effectiveAmount: player.streetBet, aggressive: false });
     logLine = `${playerName(id)} calls ${paid}`;
     state.acted.push(id);
   } else {
     let target = action.type === "all-in"
       ? getLegalActions(state, id).find((candidate) => candidate.type === "all-in")!.amount!
       : action.amount!;
-    if (action.type === "all-in" && target <= previousBet) {
+    const opponentMax = state.players[other(id)].streetBet + state.players[other(id)].stack;
+    const effectiveTarget = Math.min(target, opponentMax);
+    if (action.type === "all-in" && effectiveTarget <= previousBet) {
       const paid = putChips(state, id, target - player.streetBet);
-      record(state, id, "all-in", target);
+      record(state, id, "all-in", target, { effectiveAmount: effectiveTarget, aggressive: false });
       state.handLog.push(`${playerName(id)} calls all-in for ${paid}`);
       state.acted = [...new Set([...state.acted, id])];
       if (bettingRoundComplete(state)) advanceStreet(state);
@@ -378,11 +386,12 @@ export function applyAction(state: EngineState, id: PlayerId, rawAction: EngineA
     const paid = putChips(state, id, target - player.streetBet);
     target = player.streetBet;
     const aggressiveType: "bet" | "raise" = previousBet === 0 ? "bet" : "raise";
-    record(state, id, action.type === "all-in" ? "all-in" : aggressiveType, target);
+    const semanticAggression = effectiveTarget > previousBet;
+    record(state, id, action.type === "all-in" ? "all-in" : aggressiveType, target, { effectiveAmount: effectiveTarget, aggressive: semanticAggression });
     logLine = action.type === "all-in"
       ? `${playerName(id)} is all-in to ${target}`
       : `${playerName(id)} ${aggressiveType === "bet" ? "bets" : "raises to"} ${target}`;
-    const raiseSize = target - previousBet;
+    const raiseSize = effectiveTarget - previousBet;
     if (raiseSize >= state.minRaise) state.minRaise = raiseSize;
     state.currentBet = Math.max(state.currentBet, target);
     state.acted = [id];

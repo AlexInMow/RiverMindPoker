@@ -33,6 +33,10 @@ export interface PlayerAction {
   street: Street;
   action: ActionType | "small-blind" | "big-blind" | "wins" | "split";
   amount?: number;
+  /** Effective total street target after capping chips the opponent cannot cover. */
+  effectiveAmount?: number;
+  /** Semantic aggression decided by the engine, not inferred from the action label. */
+  aggressive?: boolean;
   at: number;
 }
 
@@ -96,7 +100,9 @@ export interface PlayerProfile {
   checkRaise: number;
   checkRaiseOpportunities: number;
   wentToShowdown: number;
+  wentToShowdownOpportunities: number;
   wonAtShowdown: number;
+  wonAtShowdownOpportunities: number;
   aggressionFactor: number;
   averageBetSize: number;
   tendencies: string[];
@@ -107,6 +113,8 @@ export interface CompactHandAction {
   street: Street;
   action: ActionType;
   amount?: number;
+  effectiveAmount?: number;
+  aggressive?: boolean;
 }
 
 export interface AdaptiveHandSummary {
@@ -147,6 +155,37 @@ export interface AIContextMetrics {
   aiStreetBet: number;
   playerStreetBet: number;
   lastAction?: CompactHandAction;
+}
+
+export interface AdaptiveMetricConfidence {
+  preflop: number;
+  facingBet: number;
+  facingThreeBet: number;
+  facingCBet: number;
+  flopCBet: number;
+  turnBarrel: number;
+  river: number;
+  checkRaise: number;
+  wentToShowdown: number;
+  wonAtShowdown: number;
+  repeatedPatterns: number;
+}
+
+export interface AdaptiveFrequencyAdjustments {
+  defend: number;
+  call: number;
+  raise: number;
+  fold: number;
+  bluff: number;
+  value: number;
+}
+
+export interface AdaptivePolicy {
+  opponentType: "unknown" | "aggressive" | "nit" | "calling-station" | "balanced";
+  confidence: number;
+  metricConfidence: AdaptiveMetricConfidence;
+  frequencyAdjustments: AdaptiveFrequencyAdjustments;
+  reasons: string[];
 }
 
 export interface SessionStats extends PlayerProfile {
@@ -211,6 +250,7 @@ export interface AIVisibleGameState {
   currentHandActions: PlayerAction[];
   recentHands: AdaptiveHandSummary[];
   repeatedPlayerPatterns: RepeatedPlayerPattern[];
+  counterStrategy: AdaptivePolicy;
   legalActions: LegalAction[];
   playerProfile: PlayerProfile;
 }

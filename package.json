@@ -17,6 +17,7 @@
     "service:uninstall": "bash scripts/macos-service.sh uninstall",
     "test": "vitest run",
     "test:watch": "vitest",
+    "simulate:adaptive": "node --import tsx scripts/simulate-adaptive.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

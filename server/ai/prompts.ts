@@ -8,7 +8,7 @@ const strategyPrompts: Record<Strategy, string> = {
   "calling-station": "Call wider with bluff-catchers and draws, raise infrequently, and do not fold medium strength too readily.",
   maniac: "Play extremely aggressively with frequent raises, 3-bets, bluffs, and occasional overbets, while staying inside legal actions.",
   tricky: "Use traps, check-raises, delayed aggression, and mixed lines so your play is difficult to read.",
-  adaptive: "Exploit the supplied opportunity-based player profile and structured recentHands. Use repeatedPlayerPatterns only when repeated, weight every rate by its opportunity count, and materially adjust defend/call/raise/fold frequencies while avoiding overreaction to small samples.",
+  adaptive: "Follow the server-computed counterStrategy as a calibrated prior. Its metricConfidence values are based on each metric's own denominator, and frequencyAdjustments explicitly recommend changes to defend/call/raise/fold/bluff/value frequencies. Reconcile that policy with cards, potOdds, position, SPR, boardMetrics and legal sizing; it is guidance, never a command to make an obviously losing action.",
 };
 
 const difficultyPrompts: Record<Difficulty, string> = {

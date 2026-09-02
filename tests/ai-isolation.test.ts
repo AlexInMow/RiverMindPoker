@@ -27,6 +27,8 @@ describe("AI boundary", () => {
     expect(visible).toHaveProperty("effectiveStack");
     expect(visible).toHaveProperty("spr");
     expect(visible).toHaveProperty("boardMetrics");
+    expect(visible).toHaveProperty("counterStrategy.metricConfidence");
+    expect(visible).toHaveProperty("counterStrategy.frequencyAdjustments.defend");
 
     store.act(session, { type: "fold" });
     const withHistory = JSON.stringify(store.aiVisibleState(session));
