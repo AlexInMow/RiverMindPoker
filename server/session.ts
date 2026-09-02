@@ -13,7 +13,7 @@ import type {
 import { dummyDecision } from "./ai/dummyBot";
 import { OpenAIBot } from "./ai/openaiBot";
 import { validateAndNormalizeDecision } from "./ai/validation";
-import { StatsTracker } from "./stats";
+import { StatsTracker, type ObservedAction } from "./stats";
 
 export interface Session {
   id: string;
@@ -50,9 +50,9 @@ export class SessionStore {
   }
 
   act(session: Session, action: EngineAction): void {
-    const street = session.state.street;
+    const observed = this.describeAction(session.state, "human", action);
     applyAction(session.state, "human", action);
-    session.tracker.observe(action.type, street, action.amount ?? 0);
+    session.tracker.observe(observed);
     this.finalizeIfNeeded(session);
     if (session.state.actor === "ai") void this.runAI(session);
   }
@@ -112,7 +112,10 @@ export class SessionStore {
           };
         }
         session.tableTalk = decision.table_talk || undefined;
-        applyAction(session.state, "ai", { type: decision.action, amount: decision.amount });
+        const action: EngineAction = { type: decision.action, amount: decision.amount };
+        const observed = this.describeAction(session.state, "ai", action);
+        applyAction(session.state, "ai", action);
+        session.tracker.observe(observed);
         this.finalizeIfNeeded(session);
         consecutiveActions += 1;
       }
@@ -128,6 +131,16 @@ export class SessionStore {
       session.aiThinking = false;
       this.finalizeIfNeeded(session);
     }
+  }
+
+  private describeAction(state: EngineState, player: PlayerId, action: EngineAction): ObservedAction {
+    const playerState = state.players[player];
+    const allInTarget = playerState.streetBet + playerState.stack;
+    const isAggressive = action.type === "bet"
+      || action.type === "raise"
+      || (action.type === "all-in" && allInTarget > state.currentBet);
+    const amount = action.type === "all-in" ? allInTarget : action.amount ?? 0;
+    return { player, action: action.type, street: state.street, amount, isAggressive };
   }
 
   aiVisibleState(session: Session): AIVisibleGameState {

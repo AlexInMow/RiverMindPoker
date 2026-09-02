@@ -1,7 +1,28 @@
 import type { EngineState } from "../poker-engine/game";
-import type { ActionType, PlayerProfile, SessionStats, Street } from "../shared/types";
+import type { ActionType, PlayerId, PlayerProfile, SessionStats, Street } from "../shared/types";
 
-interface HandFlags { voluntary: boolean; pfr: boolean; threeBet: boolean; preflopRaises: number; }
+export interface ObservedAction {
+  player: PlayerId;
+  action: ActionType;
+  street: Street;
+  amount?: number;
+  isAggressive: boolean;
+}
+
+interface HandFlags {
+  voluntary: boolean;
+  pfr: boolean;
+  threeBet: boolean;
+  /** Big blind is the forced first bet; the first voluntary raise is therefore a 2-bet. */
+  preflopBetLevel: number;
+}
+
+const initialHandFlags = (): HandFlags => ({
+  voluntary: false,
+  pfr: false,
+  threeBet: false,
+  preflopBetLevel: 1,
+});
 
 export class StatsTracker {
   private startingStack: number;
@@ -19,7 +40,7 @@ export class StatsTracker {
   private betTotal = 0;
   private betCount = 0;
   private completed = 0;
-  private flags: HandFlags = { voluntary: false, pfr: false, threeBet: false, preflopRaises: 0 };
+  private flags: HandFlags = initialHandFlags();
   private chips: Array<{ hand: number; chips: number }>;
 
   constructor(startingStack: number, bigBlind: number) {
@@ -28,16 +49,24 @@ export class StatsTracker {
     this.chips = [{ hand: 0, chips: startingStack }];
   }
 
-  observe(action: ActionType, street: Street, amount = 0): void {
-    if (["call", "bet", "raise", "all-in"].includes(action)) this.flags.voluntary = true;
-    if (street === "preflop" && ["raise", "all-in"].includes(action)) {
-      this.flags.preflopRaises += 1;
-      this.flags.pfr = true;
-      if (this.flags.preflopRaises >= 2) this.flags.threeBet = true;
+  observe({ player, action, street, amount = 0, isAggressive }: ObservedAction): void {
+    if (street === "preflop") {
+      if (isAggressive) this.flags.preflopBetLevel += 1;
+
+      if (player === "human") {
+        const voluntarilyInvested = action === "call" || action === "raise" || action === "bet" || action === "all-in";
+        if (voluntarilyInvested) this.flags.voluntary = true;
+        if (isAggressive) {
+          this.flags.pfr = true;
+          if (this.flags.preflopBetLevel === 3) this.flags.threeBet = true;
+        }
+      }
     }
+
+    if (player !== "human") return;
     if (action === "fold") this.folds += 1;
-    if (action === "call") this.calls += 1;
-    if (["bet", "raise", "all-in"].includes(action)) {
+    if (action === "call" || (action === "all-in" && !isAggressive)) this.calls += 1;
+    if (isAggressive) {
       this.aggressiveActions += 1;
       this.betTotal += amount;
       this.betCount += 1;
@@ -57,7 +86,7 @@ export class StatsTracker {
     if (this.flags.pfr) this.pfrHands += 1;
     if (this.flags.threeBet) this.threeBetHands += 1;
     this.chips.push({ hand: this.completed, chips: state.players.human.stack });
-    this.flags = { voluntary: false, pfr: false, threeBet: false, preflopRaises: 0 };
+    this.flags = initialHandFlags();
   }
 
   profile(): PlayerProfile {
