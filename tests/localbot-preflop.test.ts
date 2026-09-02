@@ -79,6 +79,16 @@ function stackOffRate(hand: Card[], strategy: Strategy, trials: number): number 
   return stackOffs / trials;
 }
 
+function actionRate(hand: Card[], strategy: Strategy, action: string, trials = 5_000): number {
+  const state = firstFacingOpen(hand, strategy);
+  const random = seeded(0xb10ff);
+  let matches = 0;
+  for (let trial = 0; trial < trials; trial += 1) {
+    matches += Number(dummyDecision(state, strategy, false, "en", random).action === action);
+  }
+  return matches / trials;
+}
+
 describe("LocalBot preflop fundamentals", () => {
   it("classifies the requested representative starting hands", () => {
     expect(classifyPreflopHand(hands.AA).handClass).toBe("premium");
@@ -144,6 +154,14 @@ describe("LocalBot preflop fundamentals", () => {
       expect(matrix.KK, `${strategy} KK`).toBeGreaterThan(matrix.JJ);
       expect(matrix.JJ, `${strategy} JJ`).toBeGreaterThanOrEqual(matrix.JTs);
     }
+  });
+
+  it("keeps Maniac wider than Balanced early without allowing deep K2o stack-off", () => {
+    const balancedBluffThreeBet = actionRate(hands.K2o, "balanced", "raise");
+    const maniacBluffThreeBet = actionRate(hands.K2o, "maniac", "raise");
+    expect(maniacBluffThreeBet).toBeGreaterThan(balancedBluffThreeBet * 5);
+    expect(maniacBluffThreeBet).toBeLessThan(0.25);
+    expect(stackOffRate(hands.K2o, "maniac", 5_000)).toBeLessThan(0.01);
   });
 
   it("keeps ordinary postflop aggression on the separate postflop path", () => {
