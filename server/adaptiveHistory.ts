@@ -25,6 +25,7 @@ export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummar
   let preflopLevel = 1;
   let preflopAggressor: PlayerId | undefined;
   let humanPreflopAggression = false;
+  let humanMadeTwoBet = false;
   let humanFlopPressure = false;
   let humanFlopCBet = false;
   let humanTurnBarrel = false;
@@ -39,16 +40,19 @@ export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummar
     const priorTarget = targets[action.street] ?? 0;
     const isAggressive = aggressive(action, priorTarget);
     if (action.street === "preflop") {
-      if (action.player === "human" && action.action === "fold" && preflopLevel === 3) foldedToThreeBet = true;
+      if (action.player === "human" && action.action === "fold" && preflopLevel === 3 && humanMadeTwoBet) foldedToThreeBet = true;
       if (isAggressive) {
         preflopLevel += 1;
         preflopAggressor = action.player;
-        if (action.player === "human") humanPreflopAggression = true;
+        if (action.player === "human") {
+          humanPreflopAggression = true;
+          if (preflopLevel === 2) humanMadeTwoBet = true;
+        }
       }
     } else {
       const noPriorStreetAggression = !firstPostflopAggressor[action.street];
       if (action.player === "human" && action.action === "check") humanCheckedPostflop[action.street] = true;
-      if (action.player === "ai" && isAggressive && humanCheckedPostflop[action.street]) aiBetAfterHumanCheck[action.street] = true;
+      if (action.player !== "human" && isAggressive && humanCheckedPostflop[action.street]) aiBetAfterHumanCheck[action.street] = true;
       if (action.player === "human" && isAggressive && aiBetAfterHumanCheck[action.street]) humanCheckRaise = true;
       if (isAggressive && !firstPostflopAggressor[action.street]) firstPostflopAggressor[action.street] = action.player;
       if (action.player === "human" && action.street === "flop" && isAggressive) {
@@ -75,8 +79,8 @@ export function buildAdaptiveHandSummary(state: EngineState): AdaptiveHandSummar
     handNumber: state.handNumber,
     button: state.button,
     pot: state.result.pot,
-    winner: state.result.winners.length === 2 ? "split" : state.result.winners[0],
-    reachedShowdown: Boolean(state.result.humanHand),
+    winner: state.result.winners.length > 1 ? "split" : state.result.winners[0],
+    reachedShowdown: Boolean(state.result.evaluatedHands?.human || state.result.humanHand),
     actions,
     playerLineTags,
   };

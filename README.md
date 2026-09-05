@@ -1,22 +1,22 @@
 # RiverMind Poker
 
-RiverMind is a local heads-up No-Limit Texas Hold'em app for macOS. A deterministic TypeScript engine is the dealer and arbiter; OpenAI (or the offline DummyBot) is only a player and receives a deliberately restricted `AIVisibleGameState`.
+RiverMind is a local 2–4 player No-Limit Texas Hold'em app for macOS: one human can play against one, two, or three independent AI seats. A deterministic TypeScript engine is the dealer and arbiter; OpenAI (or the offline DummyBot) is only a player and receives a deliberately restricted, seat-specific `AIVisibleGameState`.
 
 ## Card dealing and fairness
 
 The backend poker engine is the only source of truth for cards. For every hand it creates a new standard 52-card deck and shuffles it exactly once with Fisher–Yates. Each swap index comes from Node.js `crypto.randomInt()`, which provides an unbiased cryptographically secure integer without modulo reduction.
 
-Cards are then removed sequentially from the end of the shuffled deck. In heads-up play, the button/small blind receives the first hole card, the big blind receives the second, and this order repeats for the second hole card. The engine burns one card before the flop, one before the turn, and one before the river. Burn cards stay out of the normal player and AI projections. The explicitly enabled local developer mode can still display private engine diagnostics for auditing.
+Cards are then removed sequentially from the end of the shuffled deck. One card is dealt to every active seat clockwise starting left of the Button, followed by a second round in the same order. The engine burns one card before the flop, one before the turn, and one before the river. Burn cards stay out of the normal player and AI projections. The explicitly enabled local developer mode can still display private engine diagnostics for auditing.
 
-Every public engine mutation verifies that the remaining deck, both players' hole cards, the board, and burn cards contain exactly the original 52 unique cards. It also verifies one shuffle per hand ID, immutable hole cards, and a forward-only draw counter. The React frontend displays server-projected state and cannot create, shuffle, deal, or replace cards.
+Every public engine mutation verifies that the remaining deck, every active seat's hole cards, the board, and burn cards contain exactly the original 52 unique cards. It also verifies one shuffle per hand ID, immutable hole cards, and a forward-only draw counter. The React frontend displays server-projected state and cannot create, shuffle, deal, or replace cards.
 
 ## MVP features
 
-- Complete heads-up hands from blinds through showdown, including folds, checks, calls, bets, raises, effective all-ins, split pots, button rotation, and future-facing side-pot layers.
+- Complete 2–4 player hands from blinds through showdown, including folds, checks, calls, bets, full/short raises, simultaneous all-ins, main/side pots, split pots, odd chips, elimination, button rotation, and automatic transition down to heads-up.
 - Tested in-house 5–7 card evaluator.
 - Eight opponent personalities and three difficulty levels.
 - OpenAI Responses API with strict JSON Schema output, server-side validation, amount clamping, and automatic DummyBot fallback.
-- Explicit AI information boundary: the request contains the AI cards, board, public stacks/actions, legal actions, deterministic decision metrics, 25 compact recent hands, repeated public line patterns, and an opportunity-based player profile—never the human hole cards.
+- Explicit per-seat AI information boundary: each request contains only that AI's cards, board, public stacks/actions, pots, positions, legal actions, deterministic decision metrics, 25 compact recent hands, repeated public line patterns, and the human profile—never the human or another AI's hole cards.
 - Dark responsive poker table, bet slider and pot-size shortcuts, table talk, coach explanation, hand log, session statistics, chip graph, and developer diagnostics.
 - Russian-first interface with an instant `RU / EN` switch on both the lobby and the table; action history, statistics, local-bot speech, and coach output follow the selected language.
 - Settings and recent session summaries saved in browser local storage.
@@ -161,8 +161,16 @@ The core trust boundary is one-way:
 ```text
 EngineState (private, complete)
   ├─> PublicGameState (human UI; AI cards hidden until showdown)
-  └─> AIVisibleGameState (AI request; human cards structurally absent)
+  └─> AIVisibleGameState(aiPlayerId) (seat-specific AI request; every other hand structurally absent)
 ```
+
+### Multiplayer engine rules
+
+Seats are ordered clockwise and retain stable IDs (`human`, `ai`, `ai-2`, `ai-3`). Heads-up uses Button = Small Blind; for three or four players the Small Blind and Big Blind are the next two active seats after the Button. Preflop action begins left of the Big Blind, postflop action begins left of the Button, and folded, all-in, or eliminated seats are skipped. A full raise reopens action; a short all-in does not reopen a player who already acted.
+
+At settlement, contributions are sorted into ascending layers. Each layer amount is its width multiplied by the number of contributors reaching it; folded chips remain in the amount but folded seats are removed from eligibility. Every layer is evaluated independently, so different players can win the main and side pots. Ties split a layer, and any odd chip goes deterministically to the first eligible winner clockwise left of the Button. A unique contribution above the second-highest contribution is returned before pots are built.
+
+Players with zero chips are marked eliminated only after the hand is fully settled. Button and blinds skip eliminated seats; once two players remain, the engine automatically applies heads-up rules. The match ends when the human is eliminated or every AI is eliminated.
 
 Developer mode intentionally exposes full internal state in the local UI for fairness auditing, alongside the exact AI-visible state, raw structured response, validation outcome, latency, and token usage. This does not change the smaller object sent to OpenAI.
 

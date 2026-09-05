@@ -1,7 +1,10 @@
 export type Suit = "s" | "h" | "d" | "c";
 export type Rank = "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "T" | "J" | "Q" | "K" | "A";
 export type Card = `${Rank}${Suit}`;
-export type PlayerId = "human" | "ai";
+export type AIPlayerId = "ai" | "ai-2" | "ai-3";
+export type PlayerId = "human" | AIPlayerId;
+export type PlayerKind = "human" | "ai";
+export type OpponentCount = 1 | 2 | 3;
 export type Street = "preflop" | "flop" | "turn" | "river" | "showdown" | "complete";
 export type Strategy = "balanced" | "tag" | "lag" | "nit" | "calling-station" | "maniac" | "tricky" | "adaptive";
 export type Difficulty = "casual" | "strong" | "expert";
@@ -19,6 +22,17 @@ export interface GameConfig {
   tableTalk: boolean;
   coachMode: boolean;
   debugMode: boolean;
+  /** Defaults to one when loading configs saved before multiplayer support. */
+  opponentCount?: OpponentCount;
+}
+
+export interface Seat {
+  seatIndex: number;
+  playerId: PlayerId;
+  kind: PlayerKind;
+  displayName: string;
+  /** Per-seat strategy permits future mixed AI personalities; setup currently assigns the table strategy to every AI. */
+  strategy?: Strategy;
 }
 
 export interface LegalAction {
@@ -48,19 +62,39 @@ export interface PlayerPublicState {
   totalContribution: number;
   folded: boolean;
   allIn: boolean;
+  eliminated: boolean;
   cards: Card[] | null;
 }
+
+export interface SidePot {
+  amount: number;
+  eligible: PlayerId[];
+}
+
+export interface SettledPotResult extends SidePot {
+  index: number;
+  winners: PlayerId[];
+  payouts: PlayerPayouts;
+}
+
+export type PlayerPayouts = Record<string, number>;
 
 export interface HandResult {
   winners: PlayerId[];
   pot: number;
   summary: string;
+  evaluatedHands?: Partial<Record<PlayerId, EvaluatedHandSummary>>;
+  pots?: SettledPotResult[];
+  /** @deprecated Compatibility fields for old heads-up consumers. */
   humanHand?: string;
+  /** @deprecated Compatibility fields for old heads-up consumers. */
   aiHand?: string;
+  /** @deprecated Compatibility fields for old heads-up consumers. */
   humanScore?: EvaluatedHandSummary;
+  /** @deprecated Compatibility fields for old heads-up consumers. */
   aiScore?: EvaluatedHandSummary;
   showdownDetail?: ShowdownDetail;
-  payouts: Record<PlayerId, number>;
+  payouts: PlayerPayouts;
 }
 
 export type ShowdownReason = "higher-card" | "higher-pair" | "higher-two-pair" | "higher-trips" | "higher-straight" | "higher-flush" | "higher-full-house" | "higher-quads" | "higher-straight-flush" | "kicker";
@@ -251,13 +285,18 @@ export interface PublicGameState {
   config: GameConfig;
   handNumber: number;
   button: PlayerId;
+  smallBlindPlayer: PlayerId;
+  bigBlindPlayer: PlayerId;
+  seats: Seat[];
+  positions: Partial<Record<PlayerId, string>>;
   street: Street;
   board: Card[];
   pot: number;
   currentBet: number;
   actor: PlayerId | null;
   matchOver: boolean;
-  players: Record<PlayerId, PlayerPublicState>;
+  players: Record<string, PlayerPublicState>;
+  sidePots: SidePot[];
   legalActions: LegalAction[];
   actions: PlayerAction[];
   handLog: string[];
@@ -266,6 +305,7 @@ export interface PublicGameState {
   stats: SessionStats;
   aiStatus: "connected" | "offline";
   aiThinking: boolean;
+  aiThinkingPlayer?: PlayerId;
   tableTalk?: string;
   debug?: DebugInfo;
 }
@@ -277,7 +317,14 @@ export interface HandHistory {
 }
 
 export interface AIVisibleGameState {
-  game: "Heads-Up No-Limit Texas Hold'em";
+  game: "No-Limit Texas Hold'em";
+  playerId: AIPlayerId;
+  playerCount: number;
+  activePlayers: number;
+  playersLeftInHand: number;
+  seats: Seat[];
+  positions: Partial<Record<PlayerId, string>>;
+  publicPlayers: Array<Omit<PlayerPublicState, "cards"> & { cards: null }>;
   handNumber: number;
   street: Street;
   aiHoleCards: Card[];
@@ -286,14 +333,18 @@ export interface AIVisibleGameState {
   amountToCall: number;
   potOdds: number;
   effectiveStack: number;
+  opponentEffectiveStacks: Record<string, number>;
   spr: number;
   boardMetrics: BoardMetrics;
   contextMetrics: AIContextMetrics;
   aiStack: number;
   playerStack: number;
   blinds: { small: number; big: number };
-  position: "button/small blind" | "big blind";
+  position: string;
   button: PlayerId;
+  smallBlindPlayer: PlayerId;
+  bigBlindPlayer: PlayerId;
+  sidePots: SidePot[];
   currentHandActions: PlayerAction[];
   recentHands: AdaptiveHandSummary[];
   repeatedPlayerPatterns: RepeatedPlayerPattern[];
@@ -322,6 +373,20 @@ export interface AITrace {
 
 export interface DebugInfo {
   internalState: unknown;
+  seats?: Seat[];
+  button?: PlayerId;
+  smallBlindPlayer?: PlayerId;
+  bigBlindPlayer?: PlayerId;
+  actor?: PlayerId | null;
+  currentBet?: number;
+  minRaise?: number;
+  playerDiagnostics?: Record<string, {
+    stack: number; streetBet: number; contribution: number; folded: boolean;
+    allIn: boolean; eliminated: boolean; raiseRight: boolean;
+  }>;
   aiVisibleState?: AIVisibleGameState;
+  aiVisibleStates?: Partial<Record<AIPlayerId, AIVisibleGameState>>;
+  sidePots?: SidePot[];
+  totalChipInvariant?: { expected: number; stacks: number; pot: number; actual: number; valid: boolean };
   lastAITrace?: AITrace;
 }

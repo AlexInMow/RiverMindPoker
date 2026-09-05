@@ -118,6 +118,15 @@ describe("player preflop statistics", () => {
     expect(foldedToOpen).toMatchObject({ foldToThreeBet: 0, foldToThreeBetOpportunities: 0 });
   });
 
+  it("does not count a cold multiway fold facing a 3-bet as fold-to-3bet", () => {
+    const coldFold = profileFor([
+      ["ai", "raise", true],
+      ["ai-2", "raise", true],
+      ["human", "fold", false, "preflop", true],
+    ]);
+    expect(coldFold).toMatchObject({ foldToThreeBet: 0, foldToThreeBetOpportunities: 0 });
+  });
+
   it("tracks fold-to-cbet from the preflop aggressor", () => {
     const profile = profileFor([
       ["ai", "raise", true],

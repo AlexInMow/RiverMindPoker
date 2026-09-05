@@ -1,6 +1,6 @@
 import { rankValue } from "../../poker-engine/cards";
-import type { EngineState } from "../../poker-engine/game";
-import type { AIContextMetrics, BoardMetrics, CompactHandAction, PlayerAction, Street } from "../../shared/types";
+import { getLegalActions, playerIds, type EngineState } from "../../poker-engine/game";
+import type { AIContextMetrics, AIPlayerId, BoardMetrics, CompactHandAction, PlayerAction, Street } from "../../shared/types";
 
 const playable = new Set(["fold", "check", "call", "bet", "raise", "all-in"]);
 const round = (value: number): number => Number(value.toFixed(4));
@@ -82,7 +82,7 @@ function compactLastAction(actions: PlayerAction[]): CompactHandAction | undefin
   };
 }
 
-export function deriveAIContext(state: EngineState): {
+export function deriveAIContext(state: EngineState, aiId: AIPlayerId = "ai"): {
   amountToCall: number;
   potOdds: number;
   effectiveStack: number;
@@ -90,23 +90,22 @@ export function deriveAIContext(state: EngineState): {
   boardMetrics: BoardMetrics;
   contextMetrics: AIContextMetrics;
 } {
-  const amountToCall = Math.min(state.players.ai.stack, Math.max(0, state.currentBet - state.players.ai.streetBet));
-  const effectiveStack = Math.min(state.players.ai.stack, state.players.human.stack);
+  const ai = state.players[aiId]!;
+  const opponents = playerIds(state)
+    .filter((id) => id !== aiId && !state.players[id]!.eliminated && !state.players[id]!.folded)
+    .map((id) => state.players[id]!);
+  const largestOpponentStack = Math.max(0, ...opponents.map((opponent) => opponent.stack));
+  const largestOpponentTotal = Math.max(0, ...opponents.map((opponent) => opponent.stack + opponent.totalContribution));
+  const amountToCall = Math.min(ai.stack, Math.max(0, state.currentBet - ai.streetBet));
+  const effectiveStack = Math.min(ai.stack, largestOpponentStack);
   const betLevel = preflopBetLevel(state.actions);
   const bigBlind = state.config.bigBlind;
-  const totalEffectiveStack = Math.min(
-    state.players.ai.stack + state.players.ai.totalContribution,
-    state.players.human.stack + state.players.human.totalContribution,
-  );
-  const aiEffectiveMaximum = Math.min(
-    state.players.ai.streetBet + state.players.ai.stack,
-    state.players.human.streetBet + state.players.human.stack,
-  );
-  const minimumRaise = state.actor === "ai" && !state.raiseLocked.includes("ai")
-    ? state.currentBet + state.minRaise <= aiEffectiveMaximum
-      ? state.currentBet + state.minRaise
-      : null
-    : null;
+  const totalEffectiveStack = Math.min(ai.stack + ai.totalContribution, largestOpponentTotal);
+  const minimumRaise = getLegalActions(state, aiId).find((action) => action.type === "raise" || action.type === "bet")?.min ?? null;
+  const buttonIndex = state.seats.findIndex((seat) => seat.playerId === state.button);
+  const postflopOrder = [...state.seats.slice(buttonIndex + 1), ...state.seats.slice(0, buttonIndex + 1)]
+    .map((seat) => seat.playerId)
+    .filter((id) => !state.players[id]!.eliminated && !state.players[id]!.folded);
   return {
     amountToCall,
     potOdds: amountToCall ? round(amountToCall / (state.pot + amountToCall)) : 0,
@@ -114,27 +113,27 @@ export function deriveAIContext(state: EngineState): {
     spr: state.pot ? round(effectiveStack / state.pot) : 0,
     boardMetrics: deriveBoardMetrics(state),
     contextMetrics: {
-      isInPositionPostflop: state.button === "ai",
+      isInPositionPostflop: postflopOrder.at(-1) === aiId,
       facingAggression: amountToCall > 0 && (state.street !== "preflop" || betLevel > 1),
       preflopBetLevel: betLevel,
       currentBet: state.currentBet,
-      aiStreetBet: state.players.ai.streetBet,
+      aiStreetBet: ai.streetBet,
       playerStreetBet: state.players.human.streetBet,
       effectiveStackBB: round(totalEffectiveStack / bigBlind),
       amountToCallBB: round(amountToCall / bigBlind),
       potBB: round(state.pot / bigBlind),
-      aiCommittedBB: round(state.players.ai.totalContribution / bigBlind),
+      aiCommittedBB: round(ai.totalContribution / bigBlind),
       humanCommittedBB: round(state.players.human.totalContribution / bigBlind),
       committedFractionOfEffectiveStack: totalEffectiveStack
-        ? round(state.players.ai.totalContribution / totalEffectiveStack)
+        ? round(ai.totalContribution / totalEffectiveStack)
         : 0,
       minimumRaiseTo: minimumRaise,
       minimumRaiseToBB: minimumRaise === null ? null : round(minimumRaise / bigBlind),
       minimumRaiseIncrementBB: minimumRaise === null ? null : round((minimumRaise - state.currentBet) / bigBlind),
-      remainingStackAfterCall: state.players.ai.stack - amountToCall,
+      remainingStackAfterCall: ai.stack - amountToCall,
       remainingStackAfterMinimumRaise: minimumRaise === null
         ? null
-        : state.players.ai.stack - Math.max(0, minimumRaise - state.players.ai.streetBet),
+        : ai.stack - Math.max(0, minimumRaise - ai.streetBet),
       lastAction: compactLastAction(state.actions),
     },
   };

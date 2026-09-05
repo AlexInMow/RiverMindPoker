@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { applyAction, createGame, getLegalActions, startNextHand, type EngineAction, type EngineState } from "../poker-engine/game";
+import { applyAction, createGame, currentSidePots, getLegalActions, isAIPlayer, playerIds, playerName, startNextHand, type EngineAction, type EngineState } from "../poker-engine/game";
 import type { RandomIndex } from "../poker-engine/cards";
 import type {
   AIDecision,
   ActionType,
+  AIPlayerId,
   AITrace,
   AIVisibleGameState,
   AdaptiveHandSummary,
@@ -30,7 +31,9 @@ export interface Session {
   adaptiveHands: AdaptiveHandSummary[];
   finalizedHands: Set<number>;
   aiThinking: boolean;
+  aiThinkingPlayer?: AIPlayerId;
   lastTrace?: AITrace;
+  lastTraces: Partial<Record<AIPlayerId, AITrace>>;
   tableTalk?: string;
 }
 
@@ -47,8 +50,10 @@ export class SessionStore {
       adaptiveHands: [],
       finalizedHands: new Set(),
       aiThinking: false,
+      lastTraces: {},
     };
     this.sessions.set(session.id, session);
+    if (session.state.actor && isAIPlayer(session.state.actor)) void this.runAI(session);
     return session;
   }
 
@@ -65,14 +70,15 @@ export class SessionStore {
     applyAction(session.state, "human", action);
     this.observeAppliedAction(session, "human", actionIndex, street, facingBet);
     this.finalizeIfNeeded(session);
-    if (session.state.actor === "ai") void this.runAI(session);
+    if (session.state.actor && isAIPlayer(session.state.actor)) void this.runAI(session);
   }
 
   next(session: Session): void {
     startNextHand(session.state);
     session.tableTalk = undefined;
     session.lastTrace = undefined;
-    if (session.state.actor === "ai") void this.runAI(session);
+    session.lastTraces = {};
+    if (session.state.actor && isAIPlayer(session.state.actor)) void this.runAI(session);
   }
 
   private finalizeIfNeeded(session: Session): void {
@@ -86,22 +92,27 @@ export class SessionStore {
   }
 
   async runAI(session: Session): Promise<void> {
-    if (session.aiThinking || session.state.actor !== "ai") return;
+    if (session.aiThinking || !session.state.actor || !isAIPlayer(session.state.actor)) return;
     session.aiThinking = true;
     session.tableTalk = undefined;
     try {
       let consecutiveActions = 0;
-      while (session.state.actor === "ai" && session.state.street !== "complete" && consecutiveActions < 4) {
-        const visible = this.aiVisibleState(session);
+      while (session.state.actor && isAIPlayer(session.state.actor) && session.state.street !== "complete") {
+        if (consecutiveActions >= 200) throw new Error("AI action loop safety guard reached");
+        const aiId = session.state.actor;
+        const aiStrategy = session.state.seats.find((seat) => seat.playerId === aiId)?.strategy ?? session.state.config.strategy;
+        session.aiThinkingPlayer = aiId;
+        const visible = this.aiVisibleState(session, aiId);
         const started = Date.now();
         let decision: AIDecision;
         try {
           if (this.bot.connected) {
-            const result = await this.bot.decide(visible, session.state.config.strategy, session.state.config.difficulty, session.state.config.tableTalk, session.state.config.language);
+            const result = await this.bot.decide(visible, aiStrategy, session.state.config.difficulty, session.state.config.tableTalk, session.state.config.language);
             decision = result.decision;
             session.lastTrace = result.trace;
+            session.lastTraces[aiId] = result.trace;
           } else {
-            const local = dummyDecisionWithTrace(visible, session.state.config.strategy, session.state.config.tableTalk, session.state.config.language);
+            const local = dummyDecisionWithTrace(visible, aiStrategy, session.state.config.tableTalk, session.state.config.language);
             const raw = local.decision;
             const normalized = validateAndNormalizeDecision(raw, visible.legalActions);
             decision = normalized.decision;
@@ -113,9 +124,10 @@ export class SessionStore {
               latencyMs: Date.now() - started,
               localDecisionTrace: local.trace,
             };
+            session.lastTraces[aiId] = session.lastTrace;
           }
         } catch (error) {
-          const local = dummyDecisionWithTrace(visible, session.state.config.strategy, session.state.config.tableTalk, session.state.config.language);
+          const local = dummyDecisionWithTrace(visible, aiStrategy, session.state.config.tableTalk, session.state.config.language);
           const raw = local.decision;
           const normalized = validateAndNormalizeDecision(raw, visible.legalActions);
           decision = normalized.decision;
@@ -127,8 +139,9 @@ export class SessionStore {
             latencyMs: Date.now() - started,
             localDecisionTrace: local.trace,
           };
+          session.lastTraces[aiId] = session.lastTrace;
         }
-        const calibrated = calibrateAdaptiveDecision(decision, visible, session.state.config.strategy);
+        const calibrated = calibrateAdaptiveDecision(decision, visible, aiStrategy);
         decision = calibrated.decision;
         if (calibrated.adjustment && session.lastTrace) {
           session.lastTrace.validation = `${session.lastTrace.validation}; ${calibrated.adjustment}`;
@@ -140,23 +153,16 @@ export class SessionStore {
         session.tableTalk = decision.table_talk || undefined;
         const action: EngineAction = { type: decision.action, amount: decision.amount };
         const street = session.state.street;
-        const facingBet = session.state.currentBet > session.state.players.ai.streetBet;
+        const facingBet = session.state.currentBet > session.state.players[aiId]!.streetBet;
         const actionIndex = session.state.actions.length;
-        applyAction(session.state, "ai", action);
-        this.observeAppliedAction(session, "ai", actionIndex, street, facingBet);
+        applyAction(session.state, aiId, action);
+        this.observeAppliedAction(session, aiId, actionIndex, street, facingBet);
         this.finalizeIfNeeded(session);
         consecutiveActions += 1;
       }
-      if (session.state.actor === "ai" && consecutiveActions >= 4) {
-        session.lastTrace = {
-          provider: "dummy",
-          visibleState: this.aiVisibleState(session),
-          validation: "Safety limit reached after four consecutive AI actions",
-          latencyMs: 0,
-        };
-      }
     } finally {
       session.aiThinking = false;
+      session.aiThinkingPlayer = undefined;
       this.finalizeIfNeeded(session);
     }
   }
@@ -176,39 +182,68 @@ export class SessionStore {
     } satisfies ObservedAction);
   }
 
-  aiVisibleState(session: Session): AIVisibleGameState {
+  aiVisibleState(session: Session, aiId: AIPlayerId = "ai"): AIVisibleGameState {
     const state = session.state;
-    const context = deriveAIContext(state);
+    const context = deriveAIContext(state, aiId);
     const playerProfile = session.tracker.profile();
     const repeatedPlayerPatterns = findRepeatedPlayerPatterns(session.adaptiveHands);
     return {
-      game: "Heads-Up No-Limit Texas Hold'em",
+      game: "No-Limit Texas Hold'em",
+      playerId: aiId,
+      playerCount: state.seats.length,
+      activePlayers: state.seats.filter((seat) => !state.players[seat.playerId]!.eliminated).length,
+      playersLeftInHand: state.seats.filter((seat) => !state.players[seat.playerId]!.eliminated && !state.players[seat.playerId]!.folded).length,
+      seats: state.seats.map((seat) => ({ ...seat })),
+      positions: { ...state.positions },
+      publicPlayers: state.seats.map((seat) => {
+        const { cards: _cards, ...publicPlayer } = state.players[seat.playerId]!;
+        return { ...publicPlayer, cards: null };
+      }),
       handNumber: state.handNumber,
       street: state.street,
-      aiHoleCards: [...state.players.ai.cards],
+      aiHoleCards: [...state.players[aiId]!.cards],
       board: [...state.board],
       pot: state.pot,
       ...context,
-      aiStack: state.players.ai.stack,
+      opponentEffectiveStacks: Object.fromEntries(state.seats.filter((seat) => seat.playerId !== aiId && !state.players[seat.playerId]!.eliminated).map((seat) => [seat.playerId, Math.min(state.players[aiId]!.stack + state.players[aiId]!.totalContribution, state.players[seat.playerId]!.stack + state.players[seat.playerId]!.totalContribution)])),
+      aiStack: state.players[aiId]!.stack,
       playerStack: state.players.human.stack,
       blinds: { small: state.config.smallBlind, big: state.config.bigBlind },
-      position: state.button === "ai" ? "button/small blind" : "big blind",
+      position: state.positions[aiId] ?? "",
       button: state.button,
+      smallBlindPlayer: state.smallBlindPlayer,
+      bigBlindPlayer: state.bigBlindPlayer,
+      sidePots: currentSidePots(state),
       currentHandActions: [...state.actions],
       recentHands: session.adaptiveHands,
       repeatedPlayerPatterns,
       counterStrategy: deriveAdaptivePolicy(playerProfile, repeatedPlayerPatterns),
-      legalActions: getLegalActions(state, "ai"),
+      legalActions: getLegalActions(state, aiId),
       playerProfile,
     };
   }
 
   publicState(session: Session): PublicGameState {
     const state = session.state;
-    const reachedShowdown = Boolean(state.result?.aiHand);
+    const reachedShowdown = Boolean(state.result?.evaluatedHands);
+    const stackTotal = playerIds(state).reduce((sum, id) => sum + state.players[id]!.stack, 0);
     const debug: DebugInfo | undefined = state.config.debugMode ? {
       internalState: structuredClone(state),
+      seats: state.seats.map((seat) => ({ ...seat })),
+      button: state.button,
+      smallBlindPlayer: state.smallBlindPlayer,
+      bigBlindPlayer: state.bigBlindPlayer,
+      actor: state.actor,
+      currentBet: state.currentBet,
+      minRaise: state.minRaise,
+      playerDiagnostics: Object.fromEntries(state.seats.map((seat) => {
+        const current = state.players[seat.playerId]!;
+        return [seat.playerId, { stack: current.stack, streetBet: current.streetBet, contribution: current.totalContribution, folded: current.folded, allIn: current.allIn, eliminated: current.eliminated, raiseRight: !current.folded && !current.allIn && !current.eliminated && !state.raiseLocked.includes(seat.playerId) }];
+      })),
       aiVisibleState: session.lastTrace?.visibleState,
+      aiVisibleStates: Object.fromEntries(state.seats.filter((seat) => seat.kind === "ai").map((seat) => [seat.playerId, this.aiVisibleState(session, seat.playerId as AIPlayerId)])),
+      sidePots: currentSidePots(state),
+      totalChipInvariant: { expected: state.expectedTotalChips, stacks: stackTotal, pot: state.pot, actual: stackTotal + state.pot, valid: stackTotal + state.pot === state.expectedTotalChips },
       lastAITrace: session.lastTrace,
     } : undefined;
     return {
@@ -217,16 +252,21 @@ export class SessionStore {
       config: state.config,
       handNumber: state.handNumber,
       button: state.button,
+      smallBlindPlayer: state.smallBlindPlayer,
+      bigBlindPlayer: state.bigBlindPlayer,
+      seats: state.seats.map((seat) => ({ ...seat })),
+      positions: { ...state.positions },
       street: state.street,
       board: [...state.board],
       pot: state.pot,
       currentBet: state.currentBet,
       actor: state.actor,
       matchOver: state.matchOver,
-      players: {
-        human: { ...state.players.human, cards: [...state.players.human.cards] },
-        ai: { ...state.players.ai, cards: reachedShowdown ? [...state.players.ai.cards] : null },
-      },
+      players: Object.fromEntries(playerIds(state).map((id) => [id, {
+        ...state.players[id]!,
+        cards: id === "human" || reachedShowdown && Boolean(state.result?.evaluatedHands?.[id]) ? [...state.players[id]!.cards] : null,
+      }])) as PublicGameState["players"],
+      sidePots: currentSidePots(state),
       legalActions: state.actor === "human" ? getLegalActions(state, "human") : [],
       actions: [...state.actions],
       handLog: [...state.handLog],
@@ -235,6 +275,7 @@ export class SessionStore {
       stats: session.tracker.stats(state.players.human.stack),
       aiStatus: this.bot.connected ? "connected" : "offline",
       aiThinking: session.aiThinking,
+      aiThinkingPlayer: session.aiThinkingPlayer,
       tableTalk: session.tableTalk,
       debug,
     };
@@ -256,5 +297,4 @@ export class SessionStore {
 }
 
 export const sessions = new SessionStore();
-
-export function playerName(id: PlayerId): string { return id === "human" ? "You" : "AI"; }
+export { playerName };

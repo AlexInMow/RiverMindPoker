@@ -34,6 +34,18 @@ describe("Russian localization", () => {
     expect(resultText(result, "ru")).toBe("Банк 150 разделён: одинаковая лучшая пятёрка — Стрит до девятки");
   });
 
+  it("localizes different winners of main and side pots", () => {
+    const result: HandResult = {
+      winners: ["ai", "human"], pot: 1_000, summary: "pots", payouts: { human: 400, ai: 600, "ai-2": 0 },
+      pots: [
+        { index: 0, amount: 600, eligible: ["human", "ai", "ai-2"], winners: ["ai"], payouts: { human: 0, ai: 600, "ai-2": 0 } },
+        { index: 1, amount: 400, eligible: ["human", "ai-2"], winners: ["human"], payouts: { human: 400, ai: 0, "ai-2": 0 } },
+      ],
+    };
+    expect(resultText(result, "ru")).toBe("Основной банк: AI 1 — выигрывает 600 · Побочный банк 1: Вы — выигрываете 400");
+    expect(resultText(result, "en")).toBe("Main pot: AI 1 wins 600 · Side pot 1: You win 400");
+  });
+
   it.each([
     [0, [14], "Старшая карта: A"],
     [1, [14, 13, 12, 9], "Пара тузов"],

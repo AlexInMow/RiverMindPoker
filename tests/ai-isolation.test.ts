@@ -36,6 +36,24 @@ describe("AI boundary", () => {
     expect(session.adaptiveHands).toHaveLength(1);
   });
 
+  it("isolates every AI from all other hole cards at a four-player table", () => {
+    const store = new SessionStore();
+    const session = store.create({ ...config, opponentCount: 3 });
+    for (const viewer of ["ai", "ai-2", "ai-3"] as const) {
+      const visible = store.aiVisibleState(session, viewer);
+      const serialized = JSON.stringify(visible);
+      expect(visible.playerId).toBe(viewer);
+      expect(visible.aiHoleCards).toEqual(session.state.players[viewer]!.cards);
+      expect(visible.publicPlayers.every((player) => player.cards === null)).toBe(true);
+      for (const hiddenId of ["human", "ai", "ai-2", "ai-3"] as const) {
+        if (hiddenId === viewer) continue;
+        for (const card of session.state.players[hiddenId]!.cards) expect(serialized).not.toContain(`"${card}"`);
+      }
+      expect(Object.keys(visible)).not.toContain("deck");
+      expect(Object.keys(visible)).not.toContain("burnCards");
+    }
+  });
+
   it("clamps an out-of-range model raise", () => {
     const legal = [{ type: "raise" as const, min: 300, max: 1200, label: "RAISE TO 300" }];
     const result = validateAndNormalizeDecision({ action: "raise", amount: 99999, reasoning_summary: "Pressure.", table_talk: "" }, legal);

@@ -1,9 +1,9 @@
 import type { EvaluatedHandSummary, HandResult, Language, PlayerAction, Strategy, Street } from "../shared/types";
 
 const en = {
-  headsUp: "HEADS-UP NO-LIMIT HOLD'EM", hero1: "Read the table.", hero2: "Not the cards.",
-  intro: "Play a complete heads-up session against an AI opponent. The deterministic engine deals every card and enforces every chip.",
-  isolated: "Information-isolated AI", noCards: "Your hole cards never enter the decision request.", newTable: "NEW TABLE", chooseOpponent: "Choose your opponent", local: "LOCAL",
+  headsUp: "2–4 PLAYER NO-LIMIT HOLD'EM", hero1: "Read the table.", hero2: "Not the cards.",
+  intro: "Play a complete session against one, two, or three AI opponents. The deterministic engine deals every card and enforces every chip.",
+  isolated: "Information-isolated AI", noCards: "Each AI sees only its own cards and public table information.", newTable: "NEW TABLE", chooseOpponent: "Choose your table", opponents: "AI opponents", local: "LOCAL",
   difficulty: "Difficulty", startingStack: "Starting stack", blinds: "Blinds", smallBlind: "Small blind", bigBlind: "Big blind",
   tableTalk: "AI table talk", coachMode: "Coach mode", debugMode: "Developer debug", opening: "OPENING TABLE…", takeSeat: "TAKE A SEAT", disclaimer: "Virtual chips only. No real-money gambling.",
   hand: "HAND", chips: "CHIPS", yourTurn: "YOUR TURN", you: "YOU", pot: "POT", handComplete: "HAND COMPLETE", aiThinking: "AI is thinking", smallBlindShort: "SB", bigBlindShort: "BB",
@@ -18,9 +18,9 @@ const en = {
 
 type TranslationKey = keyof typeof en;
 const ru: Record<TranslationKey, string> = {
-  headsUp: "ХЕДЗ-АП БЕЗЛИМИТНЫЙ ХОЛДЕМ", hero1: "Читайте стол.", hero2: "Не чужие карты.",
-  intro: "Сыграйте полноценную хедз-ап сессию против AI-соперника. Детерминированный движок раздаёт карты, контролирует ставки и каждую фишку.",
-  isolated: "Честная информационная изоляция", noCards: "Ваши закрытые карты никогда не передаются AI.", newTable: "НОВЫЙ СТОЛ", chooseOpponent: "Выберите соперника", local: "ЛОКАЛЬНО",
+  headsUp: "ХОЛДЕМ НА 2–4 ИГРОКОВ", hero1: "Читайте стол.", hero2: "Не чужие карты.",
+  intro: "Сыграйте полноценную сессию против одного, двух или трёх AI-соперников. Детерминированный движок раздаёт карты, контролирует ставки и каждую фишку.",
+  isolated: "Честная информационная изоляция", noCards: "Каждый AI видит только свои карты и открытую информацию стола.", newTable: "НОВЫЙ СТОЛ", chooseOpponent: "Настройте стол", opponents: "Соперники", local: "ЛОКАЛЬНО",
   difficulty: "Уровень", startingStack: "Начальный стек", blinds: "Блайнды", smallBlind: "Малый блайнд", bigBlind: "Большой блайнд",
   tableTalk: "Реплики AI", coachMode: "Режим тренера", debugMode: "Режим разработчика", opening: "ОТКРЫВАЕМ СТОЛ…", takeSeat: "СЕСТЬ ЗА СТОЛ", disclaimer: "Только виртуальные фишки. Игра не использует реальные деньги.",
   hand: "РАЗДАЧА", chips: "ФИШЕК", yourTurn: "ВАШ ХОД", you: "ВЫ", pot: "БАНК", handComplete: "РАЗДАЧА ЗАВЕРШЕНА", aiThinking: "AI думает", smallBlindShort: "МБ", bigBlindShort: "ББ",
@@ -145,35 +145,56 @@ function showdownSuffix(result: HandResult, language: Language): string {
 
 export function resultText(result: HandResult, language: Language): string {
   const pot = result.pot.toLocaleString(language === "ru" ? "ru-RU" : "en-US").replace(/\u00a0/g, " ");
-  if (result.winners.length === 2) {
-    const description = handDescription(result.humanScore, result.humanHand, language);
+  if (result.pots && result.pots.length > 1) {
+    return result.pots.map((settled, index) => {
+      const label = language === "ru" ? (index === 0 ? "Основной банк" : `Побочный банк ${index}`) : (index === 0 ? "Main pot" : `Side pot ${index}`);
+      const names = settled.winners.map((id) => playerDisplayName(id, language)).join(" / ");
+      const amount = settled.amount.toLocaleString(language === "ru" ? "ru-RU" : "en-US").replace(/\u00a0/g, " ");
+      const humanOnly = settled.winners.length === 1 && settled.winners[0] === "human";
+      return language === "ru" ? `${label}: ${names} — ${settled.winners.length > 1 ? "делят" : humanOnly ? "выигрываете" : "выигрывает"} ${amount}` : `${label}: ${names} ${settled.winners.length > 1 ? "split" : humanOnly ? "win" : "wins"} ${amount}`;
+    }).join(" · ");
+  }
+  if (result.winners.length > 1) {
+    const description = handDescription(result.evaluatedHands?.[result.winners[0]!] ?? result.humanScore, result.humanHand, language);
+    const names = result.winners.map((id) => playerDisplayName(id, language)).join(" / ");
+    if (result.winners.length > 2) return language === "ru" ? `Банк ${pot} разделён: ${names} — ${description}` : `Split pot ${pot}: ${names} — ${description}`;
     return language === "ru" ? `Банк ${pot} разделён: одинаковая лучшая пятёрка — ${description}` : `Split pot ${pot}: identical best five — ${description}`;
   }
-  const humanWins = result.winners[0] === "human";
-  const winner = humanWins ? (language === "ru" ? "Вы" : "You") : "AI";
-  if (!result.humanHand) return language === "ru" ? `${winner} ${humanWins ? "забираете" : "забирает"} банк ${pot} — соперник сбросил карты` : `${winner} wins pot ${pot} — opponent folded`;
-  const hand = handDescription(humanWins ? result.humanScore : result.aiScore, humanWins ? result.humanHand : result.aiHand, language);
+  const winnerId = result.winners[0]!;
+  const humanWins = winnerId === "human";
+  const winner = playerDisplayName(winnerId, language);
+  const score = result.evaluatedHands?.[winnerId] ?? (humanWins ? result.humanScore : result.aiScore);
+  const legacyHand = humanWins ? result.humanHand : result.aiHand;
+  if (!score && !legacyHand) return language === "ru" ? `${winner} ${humanWins ? "забираете" : "забирает"} банк ${pot} — остальные сбросили карты` : `${winner} wins pot ${pot} — all opponents folded`;
+  const hand = handDescription(score, legacyHand, language);
   return language === "ru"
     ? `${winner} ${humanWins ? "выигрываете" : "выигрывает"} ${pot}: ${hand}${showdownSuffix(result, language)}`
     : `${winner} ${humanWins ? "win" : "wins"} ${pot}: ${hand}${showdownSuffix(result, language)}`;
 }
 
-const playerRu = (name: string) => name === "You" ? "Вы" : "AI";
+export function playerDisplayName(id: string, language: Language): string {
+  if (id === "human" || id === "You") return language === "ru" ? "Вы" : "You";
+  if (id === "ai" || id === "AI") return language === "ru" ? "AI 1" : "AI 1";
+  const match = id.match(/(?:ai-|AI )(\d+)/i);
+  return match ? `AI ${match[1]}` : id;
+}
+const playerRu = (name: string) => name === "You" ? "Вы" : name === "AI" ? "AI" : name;
 export function translateLog(line: string, language: Language): string {
   if (language === "en") return line;
   let match: RegExpMatchArray | null;
   if ((match = line.match(/^Hand #(\d+)$/))) return `Раздача №${match[1]}`;
-  if ((match = line.match(/^(You|AI) (?:are|is) Button \/ SB$/))) return `${playerRu(match[1])} — баттон / МБ`;
-  if ((match = line.match(/^(You|AI) posts (small blind|big blind) (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "ставите" : "ставит"} ${match[2] === "small blind" ? "малый" : "большой"} блайнд ${match[3]}`;
-  if ((match = line.match(/^(You|AI) folds$/))) return `${playerRu(match[1])} — пас`;
-  if ((match = line.match(/^(You|AI) checks$/))) return `${playerRu(match[1])} — чек`;
-  if ((match = line.match(/^(You|AI) calls (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "коллируете" : "коллирует"} ${match[2]}`;
-  if ((match = line.match(/^(You|AI) bets (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "ставите" : "ставит"} ${match[2]}`;
-  if ((match = line.match(/^(You|AI) raises to (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "повышаете" : "повышает"} до ${match[2]}`;
-  if ((match = line.match(/^(You|AI) is all-in to (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "идёте" : "идёт"} олл-ин до ${match[2]}`;
-  if ((match = line.match(/^(You|AI) calls all-in for (\d+)$/))) return `${playerRu(match[1])} ${match[1] === "You" ? "коллируете" : "коллирует"} олл-ин на ${match[2]}`;
-  if ((match = line.match(/^Uncalled (\d+) returned to (You|AI)$/))) return `Непокрытая ставка ${match[1]} возвращена: ${playerRu(match[2])}`;
-  if ((match = line.match(/^Uncalled (\d+) returned to (You|AI)$/))) return `Непринятые ${match[1]} возвращены: ${playerRu(match[2])}`;
+  if ((match = line.match(/^(You|AI(?: [123])?) (?:are|is) Button$/))) return `${playerRu(match[1])} — баттон`;
+  const who = "(You|AI(?: [123])?)";
+  if ((match = line.match(new RegExp(`^${who} (?:are|is) Button \\/ SB$`)))) return `${playerRu(match[1])} — баттон / МБ`;
+  if ((match = line.match(new RegExp(`^${who} posts (small blind|big blind) (\\d+)$`)))) return `${playerRu(match[1])} ${match[1] === "You" ? "ставите" : "ставит"} ${match[2] === "small blind" ? "малый" : "большой"} блайнд ${match[3]}`;
+  if ((match = line.match(new RegExp(`^${who} folds$`)))) return `${playerRu(match[1])} — пас`;
+  if ((match = line.match(new RegExp(`^${who} checks$`)))) return `${playerRu(match[1])} — чек`;
+  if ((match = line.match(new RegExp(`^${who} calls (\\d+)$`)))) return `${playerRu(match[1])} ${match[1] === "You" ? "коллируете" : "коллирует"} ${match[2]}`;
+  if ((match = line.match(new RegExp(`^${who} bets (\\d+)$`)))) return `${playerRu(match[1])} ${match[1] === "You" ? "ставите" : "ставит"} ${match[2]}`;
+  if ((match = line.match(new RegExp(`^${who} raises to (\\d+)$`)))) return `${playerRu(match[1])} ${match[1] === "You" ? "повышаете" : "повышает"} до ${match[2]}`;
+  if ((match = line.match(new RegExp(`^${who} is all-in to (\\d+)$`)))) return `${playerRu(match[1])} ${match[1] === "You" ? "идёте" : "идёт"} олл-ин до ${match[2]}`;
+  if ((match = line.match(new RegExp(`^${who} calls all-in for (\\d+)$`)))) return `${playerRu(match[1])} ${match[1] === "You" ? "коллируете" : "коллирует"} олл-ин на ${match[2]}`;
+  if ((match = line.match(new RegExp(`^Uncalled (\\d+) returned to ${who}$`)))) return `Непокрытая ставка ${match[1]} возвращена: ${playerRu(match[2])}`;
   if ((match = line.match(/^(Flop|Turn|River): (.+)$/))) return `${({ Flop: "Флоп", Turn: "Тёрн", River: "Ривер" } as Record<string, string>)[match[1]]}: ${match[2]}`;
   if ((match = line.match(/^Showdown: You (.+) · AI (.+)$/))) return `Вскрытие: Вы ${match[1]} · AI ${match[2]}`;
   if ((match = line.match(/^(You (?:win|wins)|AI wins) (\d+) \(opponent folded\)$/))) return `${playerRu(match[1].startsWith("You") ? "You" : "AI")} ${match[1].startsWith("You") ? "забираете" : "забирает"} ${match[2]} — соперник сбросил карты`;

@@ -19,9 +19,10 @@ const difficultyPrompts: Record<Difficulty, string> = {
 
 export function decisionInstructions(strategy: Strategy, difficulty: Difficulty, tableTalk: boolean, language: Language): string {
   return [
-    "You are the AI player in a heads-up no-limit Texas Hold'em game. The deterministic application is the dealer and arbiter.",
+    "You are one AI seat in a 2-4 player no-limit Texas Hold'em game. The deterministic application is the dealer and arbiter.",
     "Choose exactly one of the supplied legal actions. Never invent game state, award a pot, deal cards, or alter rules.",
-    "You only know the structured state provided. Never infer or claim knowledge of the human's hidden cards.",
+    "You only know the structured player-specific state provided. Never infer or claim knowledge of any opponent's hidden cards.",
+    "In multiway pots, tighten value requirements and bluff less as the number of players still in the hand increases.",
     strategyPrompts[strategy],
     difficultyPrompts[difficulty],
     "Return a short reasoning_summary suitable for a coach; do not reveal private chain-of-thought.",

@@ -18,6 +18,7 @@ const ConfigSchema = z.object({
   tableTalk: z.boolean(),
   coachMode: z.boolean(),
   debugMode: z.boolean(),
+  opponentCount: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
 }).refine((value) => value.smallBlind < value.bigBlind, { message: "Small blind must be below big blind" })
   .refine((value) => value.startingStack >= value.bigBlind * 10, { message: "Starting stack must be at least 10 big blinds" });
 

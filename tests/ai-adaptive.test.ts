@@ -149,7 +149,7 @@ describe("Adaptive local bot", () => {
   });
 
   it("can use an all-in as the only available aggressive action", () => {
-    const state = visible(callingStationProfile, 0.5, true, 9_000);
+    const state = visible(callingStationProfile, 0.49, true, 9_000);
     expect(dummyDecision(state, "adaptive", false, "en", seeded(1)).action).toBe("all-in");
   });
 

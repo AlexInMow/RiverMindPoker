@@ -12,7 +12,7 @@ export function Controls({ game, disabled, onAction, onNext, language }: { game:
     ["⅓", game.pot / 3], ["½", game.pot / 2], ["⅔", game.pot * 2 / 3], ["¾", game.pot * 3 / 4], [t(language, "pot"), game.pot],
   ] as Array<[string, number]>, [game.pot, language]);
 
-  if (game.street === "complete") return <div className="complete-actions"><span>{t(language, "nextAuto")}</span>{game.players.human.stack > 0 && game.players.ai.stack > 0 && <button disabled={disabled} onClick={onNext}>{t(language, "nextHand")} <b>→</b></button>}</div>;
+  if (game.street === "complete") return <div className="complete-actions"><span>{t(language, "nextAuto")}</span>{!game.matchOver && <button disabled={disabled} onClick={onNext}>{t(language, "nextHand")} <b>→</b></button>}</div>;
   return (
     <div className={`controls ${disabled ? "disabled" : ""}`}>
       {sizing && <div className="sizing-row">

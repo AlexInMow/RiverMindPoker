@@ -17,9 +17,10 @@ interface HandFlags {
   /** Big blind is the forced first bet; the first voluntary raise is therefore a 2-bet. */
   preflopBetLevel: number;
   preflopAggressor?: PlayerId;
+  humanMadeTwoBet: boolean;
   streetAggressor: Partial<Record<Street, PlayerId>>;
   humanChecked: Partial<Record<Street, boolean>>;
-  aiFlopCBet: boolean;
+  aiFlopCBettor?: PlayerId;
   humanFacedFlopCBet: boolean;
   humanFlopCBet: boolean;
   flopCBetOpportunity: boolean;
@@ -44,8 +45,8 @@ const initialHandFlags = (): HandFlags => ({
   threeBet: false,
   preflopBetLevel: 1,
   streetAggressor: {},
+  humanMadeTwoBet: false,
   humanChecked: {},
-  aiFlopCBet: false,
   humanFacedFlopCBet: false,
   humanFlopCBet: false,
   flopCBetOpportunity: false,
@@ -110,16 +111,16 @@ export class StatsTracker {
       this.flags.foldOpportunities += 1;
       if (action === "fold") this.flags.foldsFacingBet += 1;
 
-      if (street === "preflop" && priorBetLevel === 3) {
+      if (street === "preflop" && priorBetLevel === 3 && this.flags.humanMadeTwoBet) {
         this.flags.foldToThreeBetOpportunities += 1;
         if (action === "fold") this.flags.foldsToThreeBet += 1;
       }
-      if (street === "flop" && this.flags.aiFlopCBet && !this.flags.humanFacedFlopCBet) {
+      if (street === "flop" && this.flags.aiFlopCBettor && !this.flags.humanFacedFlopCBet) {
         this.flags.humanFacedFlopCBet = true;
         this.flags.foldToCBetOpportunities += 1;
         if (action === "fold") this.flags.foldsToCBet += 1;
       }
-      if (street !== "preflop" && this.flags.humanChecked[street] && this.flags.streetAggressor[street] === "ai" && !this.flags.checkRaiseRecorded[street]) {
+      if (street !== "preflop" && this.flags.humanChecked[street] && this.flags.streetAggressor[street] !== undefined && this.flags.streetAggressor[street] !== "human" && !this.flags.checkRaiseRecorded[street]) {
         this.flags.checkRaiseRecorded[street] = true;
         this.flags.checkRaiseOpportunities += 1;
         if (isAggressive) this.flags.checkRaises += 1;
@@ -137,6 +138,7 @@ export class StatsTracker {
         if (voluntarilyInvested) this.flags.voluntary = true;
         if (isAggressive) {
           this.flags.pfr = true;
+          if (this.flags.preflopBetLevel === 2) this.flags.humanMadeTwoBet = true;
           if (this.flags.preflopBetLevel === 3) this.flags.threeBet = true;
         }
       }
@@ -157,8 +159,8 @@ export class StatsTracker {
       }
       if (action === "check" && player === "human") this.flags.humanChecked[street] = true;
       if (isAggressive) {
-        if (street === "flop" && player === "ai" && this.flags.preflopAggressor === "ai" && !this.flags.streetAggressor.flop) {
-          this.flags.aiFlopCBet = true;
+        if (street === "flop" && player !== "human" && this.flags.preflopAggressor === player && !this.flags.streetAggressor.flop) {
+          this.flags.aiFlopCBettor = player;
         }
         this.flags.streetAggressor[street] = player;
       }
@@ -177,7 +179,7 @@ export class StatsTracker {
     if (!state.result) return;
     this.completed += 1;
     if (state.result.winners.includes("human")) this.won += 1;
-    if (state.result.humanHand) {
+    if (state.result.evaluatedHands?.human || state.result.humanHand) {
       this.showdowns += 1;
       if (state.result.winners.includes("human")) this.showdownWon += 1;
     }

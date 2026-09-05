@@ -1,12 +1,12 @@
 import { useState } from "react";
-import type { Difficulty, GameConfig, Language, Strategy } from "../../shared/types";
+import type { Difficulty, GameConfig, Language, OpponentCount, Strategy } from "../../shared/types";
 import { difficultyNames, strategyInfo, t } from "../i18n";
 import { LanguageSwitch } from "./LanguageSwitch";
 
 const strategies: Strategy[] = ["balanced", "tag", "lag", "nit", "calling-station", "maniac", "tricky", "adaptive"];
 
 const defaults: GameConfig = {
-  language: "ru", startingStack: 10000, smallBlind: 50, bigBlind: 100, strategy: "balanced", difficulty: "strong", tableTalk: true, coachMode: false, debugMode: false,
+  language: "ru", startingStack: 10000, smallBlind: 50, bigBlind: 100, opponentCount: 1, strategy: "balanced", difficulty: "strong", tableTalk: true, coachMode: false, debugMode: false,
 };
 
 export function Setup({ onStart, loading, language, onLanguage }: { onStart: (config: GameConfig) => void; loading: boolean; language: Language; onLanguage: (language: Language) => void }) {
@@ -27,6 +27,10 @@ export function Setup({ onStart, loading, language, onLanguage }: { onStart: (co
       <section className="setup-panel">
         <LanguageSwitch language={language} onChange={onLanguage} className="setup-language" />
         <div className="setup-title"><div><span className="eyebrow">{t(language, "newTable")}</span><h2>{t(language, "chooseOpponent")}</h2></div><span className="live-dot">{t(language, "local")}</span></div>
+        <div className="opponent-picker">
+          <span>{t(language, "opponents")}</span>
+          <div>{([1, 2, 3] as OpponentCount[]).map((count) => <button type="button" key={count} className={config.opponentCount === count ? "selected" : ""} onClick={() => update("opponentCount", count)}>{count}</button>)}</div>
+        </div>
         <div className="strategy-grid">
           {strategies.map((strategy) => (
             <button key={strategy} className={`strategy-card ${config.strategy === strategy ? "selected" : ""}`} onClick={() => update("strategy", strategy)}>

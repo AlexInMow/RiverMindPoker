@@ -25,7 +25,7 @@ function preflopRaiseTarget(state: AIVisibleGameState, action: LegalAction): num
   const bb = state.blinds.big;
   const level = state.contextMetrics.preflopBetLevel;
   const preferred = level <= 1 ? 2.5 * bb
-    : level === 2 ? state.contextMetrics.currentBet * (state.position === "button/small blind" ? 2.6 : 3)
+    : level === 2 ? state.contextMetrics.currentBet * (state.position.includes("BTN") ? 2.6 : 3)
       : level === 3 ? state.contextMetrics.currentBet * 2.25 : action.min!;
   return Math.round(Math.max(action.min!, Math.min(action.max!, preferred)));
 }
@@ -72,6 +72,8 @@ function decidePreflop(state: AIVisibleGameState, strategy: Strategy, randomRoll
   const effectiveBB = state.contextMetrics.effectiveStackBB;
   const bb = state.blinds.big;
   const policy = strategy === "adaptive" ? state.counterStrategy : undefined;
+  const multiwayPlayers = Math.max(2, state.playersLeftInHand ?? 2);
+  const multiwayTightening = (multiwayPlayers - 2) * 0.045;
   const adaptiveConfidence = policy?.confidence ?? 0;
   const adaptiveCap = Math.min(0.06, adaptiveConfidence * 0.06);
   const adaptiveDefend = policy ? clamp(policy.frequencyAdjustments.defend, 0, adaptiveCap) : 0;
@@ -82,8 +84,8 @@ function decidePreflop(state: AIVisibleGameState, strategy: Strategy, randomRoll
   const continueByLevel = [0.12, 0.12, 0.28, 0.5, 0.68, 0.82, 0.9];
   const raiseByLevel = [0.23, 0.23, 0.48, 0.69, 0.83, 0.92, 0.96];
   const index = Math.min(6, level);
-  const continueThreshold = clamp(continueByLevel[index] + style.continueDelta + pressurePenalty - adaptiveDefend, 0.05, 0.98);
-  const raiseThreshold = clamp(raiseByLevel[index] + style.raiseDelta + pressurePenalty * 0.7 - adaptiveRaise, 0.08, 0.99);
+  const continueThreshold = clamp(continueByLevel[index] + style.continueDelta + pressurePenalty + multiwayTightening - adaptiveDefend, 0.05, 0.98);
+  const raiseThreshold = clamp(raiseByLevel[index] + style.raiseDelta + pressurePenalty * 0.7 + multiwayTightening * 1.25 - adaptiveRaise, 0.08, 0.99);
   const jamThreshold = clamp((effectiveBB >= 80 ? 0.78 : effectiveBB >= 40 ? 0.7 : 0.6) + style.jamDelta - adaptiveRaise * 0.25, 0.55, 0.92);
   const call = legal.find((item) => item.type === "call");
   const check = legal.find((item) => item.type === "check");
@@ -174,11 +176,12 @@ function decidePostflop(state: AIVisibleGameState, strategy: Strategy, randomRol
   const strength = estimateHandStrength(state);
   const policy = strategy === "adaptive" ? state.counterStrategy : undefined;
   const adjustments = policy?.frequencyAdjustments;
+  const multiwayExtra = Math.max(0, (state.playersLeftInHand ?? 2) - 2);
   const aggro = clamp(aggression[strategy] + (adjustments?.raise ?? 0) * (state.contextMetrics.facingAggression ? 0.7 : 1));
   const positionalAdjustment = state.contextMetrics.isInPositionPostflop ? -0.02 : 0;
   const lowSprAdjustment = state.spr > 0 && state.spr < 2 ? -0.05 : 0;
-  const valueThreshold = clamp(0.68 - (adjustments?.value ?? 0) * 1.4 + positionalAdjustment + lowSprAdjustment + state.boardMetrics.wetness * 0.03, 0.42, 0.9);
-  const bluffChance = clamp(aggro * (0.28 + strength * 0.5) + (adjustments?.bluff ?? 0) * (state.contextMetrics.facingAggression ? 0.3 : 1));
+  const valueThreshold = clamp(0.68 + multiwayExtra * 0.06 - (adjustments?.value ?? 0) * 1.4 + positionalAdjustment + lowSprAdjustment + state.boardMetrics.wetness * 0.03, 0.42, 0.94);
+  const bluffChance = clamp((aggro * (0.28 + strength * 0.5) + (adjustments?.bluff ?? 0) * (state.contextMetrics.facingAggression ? 0.3 : 1)) * Math.max(.45, 1 - multiwayExtra * .22));
   const allInRaise = legal.find((item) => item.type === "all-in" && (item.amount ?? 0) > state.contextMetrics.currentBet);
   const aggressive = legal.find((item) => item.type === "raise") ?? legal.find((item) => item.type === "bet") ?? allInRaise;
   const call = legal.find((item) => item.type === "call");
@@ -189,7 +192,7 @@ function decidePostflop(state: AIVisibleGameState, strategy: Strategy, randomRol
   else if (check) legalChoice = check;
   else {
     const baseCallThreshold = strategy === "calling-station" ? 0.28 : strategy === "nit" ? 0.64 : 0.42;
-    const callThreshold = clamp(baseCallThreshold - (adjustments?.defend ?? 0) + (state.potOdds - 0.25) * 0.45, 0.18, 0.82);
+    const callThreshold = clamp(baseCallThreshold + multiwayExtra * .04 - (adjustments?.defend ?? 0) + (state.potOdds - 0.25) * 0.45, 0.18, 0.86);
     const speculativeCallChance = clamp(0.16 + (adjustments?.call ?? 0) + Math.max(0, -(adjustments?.fold ?? 0)) * 0.35, 0.04, 0.42);
     legalChoice = call && (strength > callThreshold || randomValue() < speculativeCallChance) ? call : fold ?? call ?? legal[0];
   }

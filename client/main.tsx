@@ -113,7 +113,7 @@ function App() {
           <PokerTable game={game} language={language} />
           <Controls game={game} language={language} disabled={busy || game.aiThinking || (game.street !== "complete" && game.actor !== "human")} onAction={act} onNext={nextHand} />
           {game.street === "complete" && game.config.coachMode && <button className="coach-button" disabled={busy} onClick={explain}>◇ {t(language, "why")}</button>}
-          {game.matchOver && <SessionComplete humanWon={game.players.ai.stack === 0} language={language} onNewSession={leaveSession} />}
+          {game.matchOver && <SessionComplete humanWon={game.seats.filter((seat) => seat.kind === "ai").every((seat) => game.players[seat.playerId]?.eliminated)} language={language} onNewSession={leaveSession} />}
         </section>
         <SidePanel game={game} language={language} />
       </div>

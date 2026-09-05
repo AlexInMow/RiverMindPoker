@@ -99,8 +99,8 @@ describe("Adaptive over-fold regressions using reachable engine states", () => {
   });
 
   it("almost never folds a premium reachable hand and counter-raises or shoves", () => {
-    const normal = frequencies(reachableFacingState(600, 0.5, aggressive)); // deterministic A♥ K♥
-    const huge = frequencies(reachableFacingState(9_000, 0.5, aggressive));
+    const normal = frequencies(reachableFacingState(600, 0.49, aggressive)); // deterministic A♥ K♣
+    const huge = frequencies(reachableFacingState(9_000, 0.49, aggressive));
     expect(normal.fold).toBe(0);
     expect(normal.raise).toBe(4_000);
     expect(huge.fold).toBe(0);
@@ -108,29 +108,29 @@ describe("Adaptive over-fold regressions using reachable engine states", () => {
   });
 
   it("still folds genuine trash at a meaningful frequency against a large raise", () => {
-    const result = frequencies(reachableFacingState(3_000, 0.8, aggressive)); // deterministic 3♣ 2♣
+    const result = frequencies(reachableFacingState(3_000, 0.79, aggressive)); // deterministic 4♣ 2♣
     expect(result.fold).toBeGreaterThan(1_000);
     expect(result.call + result.raise).toBeGreaterThan(0);
   });
 
   it("calibrates model folds by real raise size without making defense unconditional", () => {
     const modelFold = { action: "fold" as const, amount: 0, reasoning_summary: "Fold.", table_talk: "" };
-    const small = reachableFacingState(200, 0.6, aggressive);
-    const normal = reachableFacingState(600, 0.6, aggressive);
-    const large = reachableFacingState(3_000, 0.6, aggressive);
+    const small = reachableFacingState(200, 0.61, aggressive); // deterministic 7♦ 6♦
+    const normal = reachableFacingState(600, 0.61, aggressive);
+    const large = reachableFacingState(3_000, 0.61, aggressive);
     expect(calibrateAdaptiveDecision(modelFold, small, "adaptive").decision.action).toBe("call");
     expect(calibrateAdaptiveDecision(modelFold, normal, "adaptive").decision.action).toBe("call");
     expect(calibrateAdaptiveDecision(modelFold, large, "adaptive").decision.action).toBe("fold");
 
     for (const raiseTo of [200, 600, 3_000]) {
-      const trash = reachableFacingState(raiseTo, 0.8, aggressive);
+      const trash = reachableFacingState(raiseTo, 0.79, aggressive);
       expect(calibrateAdaptiveDecision(modelFold, trash, "adaptive").decision.action).toBe("fold");
     }
   });
 
   it("overrides a model fold with a re-raise or all-in for reachable premium states", () => {
     const modelFold = { action: "fold" as const, amount: 0, reasoning_summary: "Fold.", table_talk: "" };
-    expect(calibrateAdaptiveDecision(modelFold, reachableFacingState(600, 0.5, aggressive), "adaptive").decision.action).toBe("raise");
-    expect(calibrateAdaptiveDecision(modelFold, reachableFacingState(9_000, 0.5, aggressive), "adaptive").decision.action).toBe("all-in");
+    expect(calibrateAdaptiveDecision(modelFold, reachableFacingState(600, 0.49, aggressive), "adaptive").decision.action).toBe("raise");
+    expect(calibrateAdaptiveDecision(modelFold, reachableFacingState(9_000, 0.49, aggressive), "adaptive").decision.action).toBe("all-in");
   });
 });
