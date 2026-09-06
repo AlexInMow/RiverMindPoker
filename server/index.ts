@@ -88,7 +88,9 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 });
 
 const port = Number(process.env.PORT || 3001);
-app.listen(port, () => {
-  console.log(`RiverMind server listening on http://localhost:${port}`);
+const host = process.env.HOST || "0.0.0.0";
+app.listen(port, host, () => {
+  const displayHost = host === "0.0.0.0" ? "localhost" : host;
+  console.log(`RiverMind server listening on http://${displayHost}:${port} (bind ${host})`);
   console.log(sessions.bot.connected ? `OpenAI connected (${sessions.bot.model})` : "OPENAI_API_KEY missing — using local DummyBot");
 });

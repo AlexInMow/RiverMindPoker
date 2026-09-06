@@ -534,6 +534,7 @@ function showdown(state: EngineState): void {
   const pots = currentSidePots(state);
   const totalPot = state.pot;
   const totalPayouts = emptyPayouts(state);
+  const contributions = Object.fromEntries(playerIds(state).map((id) => [id, player(state, id).totalContribution]));
   const settledPots: SettledPotResult[] = [];
   for (let index = 0; index < pots.length; index += 1) {
     const pot = pots[index];
@@ -560,7 +561,7 @@ function showdown(state: EngineState): void {
   const showdownDetail = contenders.length === 2 && winners.length === 1 && losingPlayer
     ? getShowdownDetail(scores[winners[0]]!, scores[losingPlayer]!)
     : undefined;
-  state.result = { winners, pot: totalPot, summary, evaluatedHands, pots: settledPots, payouts: totalPayouts, humanHand: humanScore?.name, aiHand: aiScore?.name, humanScore, aiScore, showdownDetail };
+  state.result = { winners, pot: totalPot, summary, evaluatedHands, pots: settledPots, payouts: totalPayouts, contributions, humanHand: humanScore?.name, aiHand: aiScore?.name, humanScore, aiScore, showdownDetail };
   state.handLog.push(`Showdown: ${contenders.map((id) => `${logPlayerName(state, id)} ${player(state, id).cards.map(cardLabel).join(" ")}`).join(" · ")}`);
   state.handLog.push(summary);
   finalizeSettlement(state);
@@ -572,11 +573,12 @@ function finishByFold(state: EngineState, winner: PlayerId): void {
   assertChipAccounting(state, "uncalled refund before fold payout");
   const totalPot = state.pot;
   const payouts = emptyPayouts(state);
+  const contributions = Object.fromEntries(playerIds(state).map((id) => [id, player(state, id).totalContribution]));
   payouts[winner] = totalPot;
   player(state, winner).stack += totalPot;
   const summary = `${logPlayerName(state, winner)} ${winner === "human" ? "win" : "wins"} ${totalPot} (opponents folded)`;
   const potResult: SettledPotResult = { index: 0, amount: totalPot, eligible: [winner], winners: [winner], payouts };
-  state.result = { winners: [winner], pot: totalPot, summary, payouts, pots: [potResult] };
+  state.result = { winners: [winner], pot: totalPot, summary, payouts, contributions, pots: [potResult] };
   record(state, winner, "wins", totalPot);
   state.handLog.push(summary);
   finalizeSettlement(state);

@@ -177,4 +177,24 @@ describe("player preflop statistics", () => {
       wonAtShowdownOpportunities: 1,
     });
   });
+
+  it("does not call a losing side-pot payout a won hand", () => {
+    const tracker = new StatsTracker(config.startingStack, config.bigBlind);
+    const completedHand = createGame({ ...config, opponentCount: 2 }, () => 0);
+    completedHand.result = {
+      winners: ["ai-2", "human"],
+      pot: 2_700,
+      summary: "Multiple pots settled",
+      contributions: { human: 1_000, ai: 1_000, "ai-2": 700 },
+      payouts: { human: 600, ai: 0, "ai-2": 2_100 },
+      pots: [
+        { index: 0, amount: 2_100, eligible: ["human", "ai", "ai-2"], winners: ["ai-2"], payouts: { human: 0, ai: 0, "ai-2": 2_100 } },
+        { index: 1, amount: 600, eligible: ["human", "ai"], winners: ["human"], payouts: { human: 600, ai: 0, "ai-2": 0 } },
+      ],
+    };
+    completedHand.players.human.stack = 9_600;
+    tracker.finish(completedHand);
+
+    expect(tracker.stats(9_600)).toMatchObject({ handsWon: 0, handsWithPayout: 1, potsWon: 1, netChips: -400 });
+  });
 });

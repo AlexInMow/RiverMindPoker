@@ -69,6 +69,8 @@ export class StatsTracker {
   private startingStack: number;
   private bigBlind: number;
   private won = 0;
+  private handsWithPayout = 0;
+  private potsWon = 0;
   private showdowns = 0;
   private showdownWon = 0;
   private biggestPot = 0;
@@ -178,7 +180,11 @@ export class StatsTracker {
   finish(state: EngineState): void {
     if (!state.result) return;
     this.completed += 1;
-    if (state.result.winners.includes("human")) this.won += 1;
+    const humanPayout = state.result.payouts.human ?? 0;
+    const humanContribution = state.result.contributions?.human ?? 0;
+    if (humanPayout > humanContribution) this.won += 1;
+    if (humanPayout > 0) this.handsWithPayout += 1;
+    this.potsWon += state.result.pots?.filter((pot) => (pot.payouts.human ?? 0) > 0).length ?? (humanPayout > 0 ? 1 : 0);
     if (state.result.evaluatedHands?.human || state.result.humanHand) {
       this.showdowns += 1;
       if (state.result.winners.includes("human")) this.showdownWon += 1;
@@ -259,6 +265,8 @@ export class StatsTracker {
     return {
       ...profile,
       handsWon: this.won,
+      handsWithPayout: this.handsWithPayout,
+      potsWon: this.potsWon,
       showdowns: this.showdowns,
       showdownsWon: this.showdownWon,
       biggestPot: this.biggestPot,

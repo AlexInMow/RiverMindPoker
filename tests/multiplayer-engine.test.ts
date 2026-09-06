@@ -172,6 +172,7 @@ describe("multiway pots and settlement", () => {
       { amount: 1_200, winners: ["ai-2"] },
       { amount: 1_100, winners: ["ai"] },
     ]);
+    expect(state.result?.contributions).toEqual({ human: 1_250, ai: 1_250, "ai-2": 700, "ai-3": 300 });
     expect(state.players.human.stack).toBe(500);
     expect(state.players.ai.stack).toBe(1_100);
     expect(state.players["ai-2"]!.stack).toBe(1_200);

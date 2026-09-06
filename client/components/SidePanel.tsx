@@ -39,7 +39,7 @@ function Stats({ game, language }: { game: PublicGameState; language: Language }
     return stats.chipHistory.map((point, index) => `${(index / Math.max(1, values.length - 1)) * 280},${80 - ((point.chips - min) / Math.max(1, max - min)) * 70}`).join(" ");
   }, [stats.chipHistory, game.config]);
   const entries = [
-    [t(language, "handsPlayed"), stats.hands], [t(language, "handsWon"), stats.handsWon], [t(language, "showdownsWon"), `${stats.showdownsWon}/${stats.showdowns}`], [t(language, "biggestPot"), stats.biggestPot.toLocaleString()],
+    [t(language, "handsPlayed"), stats.hands], [t(language, "handsWon"), stats.handsWon], [t(language, "handsWithPayout"), stats.handsWithPayout], [t(language, "potsWon"), stats.potsWon], [t(language, "showdownsWon"), `${stats.showdownsWon}/${stats.showdowns}`], [t(language, "biggestPot"), stats.biggestPot.toLocaleString()],
     ["VPIP", `${stats.vpip}%`], ["PFR", `${stats.pfr}%`], [language === "ru" ? "3-бет" : "3-Bet", `${stats.threeBet}%`], [t(language, "aggression"), stats.aggressionFactor],
     [language === "ru" ? "Фолд" : "Fold frequency", sampledRate(stats.foldFrequency, stats.foldOpportunities)],
     [language === "ru" ? "Фолд на 3-бет" : "Fold to 3-bet", sampledRate(stats.foldToThreeBet, stats.foldToThreeBetOpportunities)],

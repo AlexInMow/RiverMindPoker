@@ -54,6 +54,8 @@ npm start
 
 Open [http://localhost:3001](http://localhost:3001). The Express server serves the built React client from `dist/client`.
 
+By default the server listens on all local interfaces (`HOST=0.0.0.0`) so the existing direct Tailscale address continues to work. Set `HOST=127.0.0.1` only when access must be restricted to this Mac; that setting prevents direct access through the Mac's Tailscale IP unless a separate Tailscale proxy is configured.
+
 The convenience command below builds and starts the production-style app in one step:
 
 ```bash
@@ -104,6 +106,7 @@ Create `.env` from `.env.example` and set only the values needed locally:
 OPENAI_API_KEY=your_key_here
 OPENAI_MODEL=gpt-5.4-mini
 PORT=3001
+HOST=0.0.0.0
 ```
 
 | Variable | Required | Purpose |
@@ -111,6 +114,7 @@ PORT=3001
 | `OPENAI_API_KEY` | No | Enables model-generated poker decisions and coach explanations. When empty, the local DummyBot is used. |
 | `OPENAI_MODEL` | No | OpenAI model used by the server. Defaults to `gpt-5.4-mini`. |
 | `PORT` | No | Express production server port. Defaults to `3001`. |
+| `HOST` | No | Network interface to bind. Defaults to `0.0.0.0` for LAN/Tailscale access; use `127.0.0.1` for local-only access. |
 
 The browser bundle never reads or receives `OPENAI_API_KEY`. Keep real keys only in the ignored local `.env` file or another server-side secret store.
 

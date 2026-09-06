@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAction, createGame, startNextHand } from "../poker-engine/game";
-import type { Card, GameConfig } from "../shared/types";
+import type { Card, GameConfig, PlayerId } from "../shared/types";
 import { deriveAIContext, deriveBoardMetrics } from "../server/ai/context";
 
 const config: GameConfig = {
@@ -48,6 +48,65 @@ describe("deterministic AI context", () => {
     expect(context.contextMetrics.facingAggression).toBe(false);
   });
 
+  it("ignores one or several all-in seats when determining postflop position", () => {
+    const game = createGame({ ...config, opponentCount: 3 }, () => 0);
+    game.street = "flop";
+
+    expect(deriveAIContext(game, "ai-3").contextMetrics.isInPositionPostflop).toBe(false);
+    game.players.human.allIn = true;
+    expect(deriveAIContext(game, "ai-3").contextMetrics.isInPositionPostflop).toBe(true);
+
+    game.players["ai-3"].allIn = true;
+    expect(deriveAIContext(game, "ai-2").contextMetrics.isInPositionPostflop).toBe(true);
+  });
+
+  it("uses the latest aggressor rather than the largest stack in a three-way context", () => {
+    const game = createGame({ ...config, opponentCount: 2 }, () => 0);
+    setPlayerTotals(game, { human: 12_000, ai: 11_000, "ai-2": 7_000 });
+    applyAction(game, "human", { type: "call" });
+    applyAction(game, "ai", { type: "call" });
+    applyAction(game, "ai-2", { type: "raise", amount: 300 });
+    applyAction(game, "human", { type: "call" });
+
+    const context = deriveAIContext(game, "ai");
+    expect(context.contextMetrics.lastAction).toMatchObject({ player: "human", action: "call" });
+    expect(context).toMatchObject({
+      amountToCall: 200,
+      effectiveStack: 6_700,
+      contextMetrics: {
+        relevantAggressor: "ai-2",
+        relevantAggressorStack: 6_700,
+        relevantAggressorStreetBet: 300,
+        relevantAggressorContribution: 300,
+        relevantEffectiveStack: 7_000,
+        relevantEffectiveStackBB: 70,
+        playerStreetBet: 300,
+      },
+    });
+  });
+
+  it("keeps the relevant aggressor in a four-way context after a later fold", () => {
+    const game = createGame({ ...config, opponentCount: 3 }, () => 0);
+    setPlayerTotals(game, { human: 11_000, ai: 8_000, "ai-2": 14_000, "ai-3": 7_000 });
+    applyAction(game, "ai-3", { type: "raise", amount: 400 });
+    applyAction(game, "human", { type: "fold" });
+
+    const context = deriveAIContext(game, "ai");
+    expect(context.contextMetrics.lastAction).toMatchObject({ player: "human", action: "fold" });
+    expect(context).toMatchObject({
+      amountToCall: 350,
+      effectiveStack: 6_600,
+      contextMetrics: {
+        relevantAggressor: "ai-3",
+        relevantAggressorStack: 6_600,
+        relevantAggressorStreetBet: 400,
+        relevantAggressorContribution: 400,
+        relevantEffectiveStack: 7_000,
+        relevantEffectiveStackBB: 70,
+      },
+    });
+  });
+
   it.each([
     [["Ah", "Kh", "Qh"] as Card[], { monotone: true, twoTone: false, broadwayCards: 3, connectedness: 3 }],
     [["9s", "9d", "8s", "7c"] as Card[], { paired: true, trips: false, twoTone: false, connectedness: 3 }],
@@ -61,3 +120,11 @@ describe("deterministic AI context", () => {
     expect(deriveBoardMetrics(game)).toMatchObject(expected);
   });
 });
+
+function setPlayerTotals(game: ReturnType<typeof createGame>, totals: Partial<Record<PlayerId, number>>): void {
+  for (const [id, total] of Object.entries(totals)) {
+    const current = game.players[id]!;
+    current.stack = total - current.totalContribution;
+    current.allIn = current.stack === 0;
+  }
+}

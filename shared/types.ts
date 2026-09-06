@@ -95,6 +95,8 @@ export interface HandResult {
   aiScore?: EvaluatedHandSummary;
   showdownDetail?: ShowdownDetail;
   payouts: PlayerPayouts;
+  /** Final matched contribution after returning any uncalled excess. */
+  contributions?: PlayerPayouts;
 }
 
 export type ShowdownReason = "higher-card" | "higher-pair" | "higher-two-pair" | "higher-trips" | "higher-straight" | "higher-flush" | "higher-full-house" | "higher-quads" | "higher-straight-flush" | "kicker";
@@ -190,6 +192,13 @@ export interface AIContextMetrics {
   aiStreetBet: number;
   playerStreetBet: number;
   effectiveStackBB: number;
+  /** Most recent player whose real aggressive action established pressure on this street. */
+  relevantAggressor?: PlayerId;
+  relevantAggressorStack: number | null;
+  relevantAggressorStreetBet: number | null;
+  relevantAggressorContribution: number | null;
+  relevantEffectiveStack: number;
+  relevantEffectiveStackBB: number;
   amountToCallBB: number;
   potBB: number;
   aiCommittedBB: number;
@@ -271,6 +280,10 @@ export interface AdaptivePolicy {
 
 export interface SessionStats extends PlayerProfile {
   handsWon: number;
+  /** Hands where the human received chips from at least one pot, including losing side-pot hands. */
+  handsWithPayout: number;
+  /** Number of individual main/side pots paying chips to the human. */
+  potsWon: number;
   showdowns: number;
   showdownsWon: number;
   biggestPot: number;
