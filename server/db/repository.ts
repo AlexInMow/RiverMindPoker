@@ -127,7 +127,7 @@ export class PokerRepository {
     const humanContribution = contributions.human ?? 0;
     const humanPayout = result.payouts.human ?? 0;
     const humanNet = humanPayout - humanContribution;
-    const reachedShowdown = Boolean(result.evaluatedHands);
+    const reachedShowdown = result.endReason === "showdown" || Boolean(result.evaluatedHands);
     const humanFold = [...state.actions].reverse().find((action) => action.player === "human" && action.action === "fold");
     const tags = this.tagsFor(state, reachedShowdown);
     const metrics = difference(input.statsAfter, input.statsBefore);
@@ -154,7 +154,7 @@ export class PokerRepository {
         const current = state.players[seat.playerId]!;
         const contribution = contributions[seat.playerId] ?? 0;
         const payout = result.payouts[seat.playerId] ?? 0;
-        const revealed = seat.playerId === "human" || Boolean(result.evaluatedHands?.[seat.playerId]);
+        const revealed = seat.playerId === "human" || current.showCards;
         const wasAllIn = state.actions.some((action) => action.player === seat.playerId && action.action === "all-in");
         playerStatement.run(state.handId, seat.playerId, seat.kind, seat.seatIndex, state.positions[seat.playerId] ?? "", current.stack - payout + contribution, current.stack, contribution, payout, Number(current.folded), Number(wasAllIn), Number(current.eliminated), revealed ? json(current.cards) : null, Number(revealed && seat.playerId !== "human"));
       }

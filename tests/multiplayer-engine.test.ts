@@ -177,6 +177,7 @@ describe("multiway pots and settlement", () => {
     expect(state.players.ai.stack).toBe(1_100);
     expect(state.players["ai-2"]!.stack).toBe(1_200);
     expect(state.players["ai-3"]!.stack).toBe(1_200);
+    expect(playerIds(state).every((id) => state.players[id]!.showCards)).toBe(true);
     assertChipAccounting(state);
   });
 
@@ -193,6 +194,7 @@ describe("multiway pots and settlement", () => {
     expect(state.players.human.stack).toBe(2_997);
     expect(state.players["ai-2"]!.stack).toBe(602);
     expect(state.players.ai.stack).toBe(1);
+    expect(playerIds(state).every((id) => state.players[id]!.showCards)).toBe(true);
   });
 
   it("uses deterministic clockwise odd-chip allocation", () => {

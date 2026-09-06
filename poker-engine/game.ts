@@ -196,6 +196,13 @@ export function assertCardIntegrity(state: EngineState, context = "state update"
 function assertEngineState(state: EngineState, context: string): void {
   assertChipAccounting(state, context);
   assertCardIntegrity(state, context);
+  const revealed = playerIds(state).filter((id) => player(state, id).showCards);
+  if (state.street !== "complete" && revealed.length) throw new Error(`Reveal invariant failed after ${context}: active hand exposes hole cards`);
+  if (state.street === "complete" && state.result?.endReason === "fold" && revealed.length) throw new Error(`Reveal invariant failed after ${context}: fold win exposes hole cards`);
+  if (state.street === "complete" && state.result?.endReason === "showdown") {
+    const evaluated = Object.keys(state.result.evaluatedHands ?? {}).sort();
+    if (revealed.sort().join(",") !== evaluated.join(",")) throw new Error(`Reveal invariant failed after ${context}: revealed players must match showdown participants`);
+  }
   if (state.actor) {
     const actor = player(state, state.actor);
     if (actor.eliminated || actor.folded || actor.allIn) throw new Error(`Actor invariant failed after ${context}`);
@@ -234,7 +241,7 @@ export function createGame(config: GameConfig, randomIndex?: RandomIndex): Engin
   if (![1, 2, 3].includes(opponentCount)) throw new Error("Opponent count must be 1, 2 or 3");
   const seats = createSeats(opponentCount, config.strategy);
   const players = {} as EnginePlayers;
-  for (const seat of seats) players[seat.playerId] = { id: seat.playerId, stack: config.startingStack, streetBet: 0, totalContribution: 0, folded: false, allIn: false, eliminated: false, cards: [] };
+  for (const seat of seats) players[seat.playerId] = { id: seat.playerId, stack: config.startingStack, streetBet: 0, totalContribution: 0, folded: false, allIn: false, eliminated: false, showCards: false, cards: [] };
   const state: EngineState = {
     config: { ...config, opponentCount }, handId: "", handNumber: 1, seats,
     button: "human", smallBlindPlayer: "human", bigBlindPlayer: "ai", positions: {},
@@ -289,7 +296,7 @@ function startHand(state: EngineState, randomIndex: RandomIndex | undefined, rot
   for (const id of playerIds(state)) {
     const current = player(state, id);
     current.eliminated = current.stack === 0;
-    Object.assign(current, { streetBet: 0, totalContribution: 0, folded: current.eliminated, allIn: false, cards: [] });
+    Object.assign(current, { streetBet: 0, totalContribution: 0, folded: current.eliminated, allIn: false, showCards: false, cards: [] });
   }
   assignBlinds(state);
   state.handLog = [`Hand #${state.handNumber}`, `${logPlayerName(state, state.button)} ${state.button === "human" ? "are" : "is"} Button`];
@@ -530,6 +537,7 @@ function showdown(state: EngineState): void {
   for (const id of contenders) {
     scores[id] = evaluateHand([...player(state, id).cards, ...state.board]);
     evaluatedHands[id] = summarizeScore(scores[id]!);
+    player(state, id).showCards = true;
   }
   const pots = currentSidePots(state);
   const totalPot = state.pot;
@@ -561,7 +569,7 @@ function showdown(state: EngineState): void {
   const showdownDetail = contenders.length === 2 && winners.length === 1 && losingPlayer
     ? getShowdownDetail(scores[winners[0]]!, scores[losingPlayer]!)
     : undefined;
-  state.result = { winners, pot: totalPot, summary, evaluatedHands, pots: settledPots, payouts: totalPayouts, contributions, humanHand: humanScore?.name, aiHand: aiScore?.name, humanScore, aiScore, showdownDetail };
+  state.result = { winners, pot: totalPot, summary, evaluatedHands, pots: settledPots, payouts: totalPayouts, contributions, endReason: "showdown", humanHand: humanScore?.name, aiHand: aiScore?.name, humanScore, aiScore, showdownDetail };
   state.handLog.push(`Showdown: ${contenders.map((id) => `${logPlayerName(state, id)} ${player(state, id).cards.map(cardLabel).join(" ")}`).join(" · ")}`);
   state.handLog.push(summary);
   finalizeSettlement(state);
@@ -578,7 +586,7 @@ function finishByFold(state: EngineState, winner: PlayerId): void {
   player(state, winner).stack += totalPot;
   const summary = `${logPlayerName(state, winner)} ${winner === "human" ? "win" : "wins"} ${totalPot} (opponents folded)`;
   const potResult: SettledPotResult = { index: 0, amount: totalPot, eligible: [winner], winners: [winner], payouts };
-  state.result = { winners: [winner], pot: totalPot, summary, payouts, contributions, pots: [potResult] };
+  state.result = { winners: [winner], pot: totalPot, summary, payouts, contributions, pots: [potResult], endReason: "fold" };
   record(state, winner, "wins", totalPot);
   state.handLog.push(summary);
   finalizeSettlement(state);

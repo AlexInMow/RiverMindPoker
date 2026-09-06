@@ -159,6 +159,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .hole-cards { display: flex; }
 .ai-cards { position: absolute; top: 66px; left: 112px; transform: rotate(-1deg); }
 .ai-cards .playing-card + .playing-card { margin-left: -29px; transform: rotate(5deg); }
+.ai-cards.revealed-cards .playing-card + .playing-card { margin-left: 5px; transform: none; }
 .dealer { width: 24px; height: 24px; background: #e8e7df; color: #20241e; border-radius: 50%; display: grid; place-items: center; font: 700 9px DM Mono, monospace; box-shadow: 0 3px 8px rgba(0,0,0,.3); }
 .ai-dealer { position: absolute; top: 75px; right: 13px; }
 .hero-dealer { position: absolute; top: -13px; left: -34px; }

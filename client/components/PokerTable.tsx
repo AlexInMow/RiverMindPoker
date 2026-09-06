@@ -20,16 +20,16 @@ function OpponentSeat({ game, seat, slot, language }: { game: PublicGameState; s
   const player = game.players[seat.playerId]!;
   const thinking = game.aiThinkingPlayer === seat.playerId;
   const stateLabel = player.eliminated ? (language === "ru" ? "ВЫБЫЛ" : "OUT") : player.folded ? (language === "ru" ? "ПАС" : "FOLDED") : player.allIn ? (language === "ru" ? "ОЛЛ-ИН" : "ALL-IN") : undefined;
-  return <div className={`opponent-seat opponent-slot-${slot} ${game.actor === seat.playerId ? "active-seat" : ""} ${player.folded || player.eliminated ? "inactive-seat" : ""}`}>
+  return <div className={`opponent-seat opponent-slot-${slot} ${game.actor === seat.playerId ? "active-seat" : ""} ${(player.folded || player.eliminated) && !player.showCards ? "inactive-seat" : ""}`}>
     <div className={`avatar ${thinking ? "thinking" : ""}`}>AI {slot}<span className="status-dot" /></div>
     <div className="seat-meta">
       <div><strong>{playerDisplayName(seat.playerId, language)}</strong><span className="tag">{stateLabel ?? game.positions[seat.playerId] ?? strategyInfo[language][seat.strategy ?? game.config.strategy].name}</span></div>
       <b>{player.stack.toLocaleString(locale(language))} <small>{t(language, "chips")}</small></b>
       {player.streetBet > 0 && <span className="seat-bet">{language === "ru" ? "СТАВКА" : "BET"} {player.streetBet.toLocaleString(locale(language))}</span>}
     </div>
-    {!player.eliminated && <div className="hole-cards ai-cards">
-      <PlayingCard card={player.cards?.[0]} hidden={!player.cards} small delay={100 + slot * 30} />
-      <PlayingCard card={player.cards?.[1]} hidden={!player.cards} small delay={180 + slot * 30} />
+    {(!player.eliminated || player.showCards) && <div className={`hole-cards ai-cards ${player.showCards ? "revealed-cards" : ""}`}>
+      <PlayingCard card={player.cards?.[0]} hidden={!player.showCards} small delay={100 + slot * 30} />
+      <PlayingCard card={player.cards?.[1]} hidden={!player.showCards} small delay={180 + slot * 30} />
     </div>}
     <Marker game={game} playerId={seat.playerId} language={language} />
   </div>;

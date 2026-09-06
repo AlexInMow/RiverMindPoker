@@ -251,7 +251,6 @@ export class SessionStore {
 
   publicState(session: Session): PublicGameState {
     const state = session.state;
-    const reachedShowdown = Boolean(state.result?.evaluatedHands);
     const stackTotal = playerIds(state).reduce((sum, id) => sum + state.players[id]!.stack, 0);
     const debug: DebugInfo | undefined = state.config.debugMode ? {
       internalState: structuredClone(state),
@@ -290,7 +289,7 @@ export class SessionStore {
       matchOver: state.matchOver,
       players: Object.fromEntries(playerIds(state).map((id) => [id, {
         ...state.players[id]!,
-        cards: id === "human" || reachedShowdown && Boolean(state.result?.evaluatedHands?.[id]) ? [...state.players[id]!.cards] : null,
+        cards: id === "human" || state.players[id]!.showCards ? [...state.players[id]!.cards] : null,
       }])) as PublicGameState["players"],
       sidePots: currentSidePots(state),
       legalActions: state.actor === "human" ? getLegalActions(state, "human") : [],

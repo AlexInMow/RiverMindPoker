@@ -63,6 +63,8 @@ export interface PlayerPublicState {
   folded: boolean;
   allIn: boolean;
   eliminated: boolean;
+  /** Engine-owned reveal state. True only for players who reached showdown. */
+  showCards: boolean;
   cards: Card[] | null;
 }
 
@@ -97,6 +99,8 @@ export interface HandResult {
   payouts: PlayerPayouts;
   /** Final matched contribution after returning any uncalled excess. */
   contributions?: PlayerPayouts;
+  /** Explicit termination reason; old saved hands may omit this field. */
+  endReason?: "showdown" | "fold";
 }
 
 export type ShowdownReason = "higher-card" | "higher-pair" | "higher-two-pair" | "higher-trips" | "higher-straight" | "higher-flush" | "higher-full-house" | "higher-quads" | "higher-straight-flush" | "kicker";
