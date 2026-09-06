@@ -1,6 +1,19 @@
 import type { EngineState } from "../poker-engine/game";
 import type { ActionType, PlayerId, PlayerProfile, SessionStats, Street } from "../shared/types";
 
+export interface RawStatsSnapshot {
+  completed: number; vpipHands: number; pfrHands: number; threeBetHands: number;
+  sawFlopHands: number; showdowns: number; showdownWon: number;
+  foldOpportunities: number; foldsFacingBet: number;
+  foldToThreeBetOpportunities: number; foldsToThreeBet: number;
+  foldToCBetOpportunities: number; foldsToCBet: number;
+  flopCBetOpportunities: number; flopCBets: number;
+  turnBarrelOpportunities: number; turnBarrels: number;
+  riverOpportunities: number; riverAggressiveHands: number;
+  checkRaiseOpportunities: number; checkRaises: number;
+  calls: number; aggressiveActions: number; betTotal: number; betCount: number;
+}
+
 export interface ObservedAction {
   player: PlayerId;
   action: ActionType;
@@ -273,6 +286,23 @@ export class StatsTracker {
       netChips,
       bbPer100: this.completed ? Number((netChips / this.bigBlind / this.completed * 100).toFixed(1)) : 0,
       chipHistory: this.chips,
+    };
+  }
+
+  rawSnapshot(): RawStatsSnapshot {
+    return {
+      completed: this.completed, vpipHands: this.vpipHands, pfrHands: this.pfrHands,
+      threeBetHands: this.threeBetHands, sawFlopHands: this.sawFlopHands,
+      showdowns: this.showdowns, showdownWon: this.showdownWon,
+      foldOpportunities: this.foldOpportunities, foldsFacingBet: this.foldsFacingBet,
+      foldToThreeBetOpportunities: this.foldToThreeBetOpportunities, foldsToThreeBet: this.foldsToThreeBet,
+      foldToCBetOpportunities: this.foldToCBetOpportunities, foldsToCBet: this.foldsToCBet,
+      flopCBetOpportunities: this.flopCBetOpportunities, flopCBets: this.flopCBets,
+      turnBarrelOpportunities: this.turnBarrelOpportunities, turnBarrels: this.turnBarrels,
+      riverOpportunities: this.riverOpportunities, riverAggressiveHands: this.riverAggressiveHands,
+      checkRaiseOpportunities: this.checkRaiseOpportunities, checkRaises: this.checkRaises,
+      calls: this.calls, aggressiveActions: this.aggressiveActions,
+      betTotal: this.betTotal, betCount: this.betCount,
     };
   }
 }

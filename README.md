@@ -115,8 +115,19 @@ HOST=0.0.0.0
 | `OPENAI_MODEL` | No | OpenAI model used by the server. Defaults to `gpt-5.4-mini`. |
 | `PORT` | No | Express production server port. Defaults to `3001`. |
 | `HOST` | No | Network interface to bind. Defaults to `0.0.0.0` for LAN/Tailscale access; use `127.0.0.1` for local-only access. |
+| `RIVERMIND_DATA_DIR` | No | Directory for persistent local data. Defaults to `./data`. |
+| `RIVERMIND_DATABASE_PATH` | No | Optional absolute SQLite database path overriding the data directory. |
+| `RIVERMIND_BACKUP_DIR` | No | Optional backup directory. Defaults to `<data directory>/backups`. |
 
 The browser bundle never reads or receives `OPENAI_API_KEY`. Keep real keys only in the ignored local `.env` file or another server-side secret store.
+
+## Local profiles and persistent history
+
+RiverMind stores password-free local player profiles, completed hands, ordered actions, public/revealed cards, side pots, review notes, and lifetime statistics in SQLite. The default database is `data/rivermind.sqlite`; `data/`, database files, and backups are ignored by Git. Schema changes are applied through the versioned `schema_migrations` table (current version: 1).
+
+Select or create a profile before opening a table. Every completed hand is written atomically and is protected from duplicate finalization by the engine hand UUID. Folded AI cards remain hidden in normal history and exports. The Profile & History screen provides filters, JSON/CSV exports, hand review marks, and an on-demand SQLite backup.
+
+For a future packaged macOS build, set `RIVERMIND_DATA_DIR` to a directory under `~/Library/Application Support/RiverMind`; application code resolves the location through one data-path helper rather than hard-coded paths.
 
 ## Verify and build
 

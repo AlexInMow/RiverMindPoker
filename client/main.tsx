@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { GameConfig, Language, PublicGameState } from "../shared/types";
+import type { LocalPlayerProfile } from "../shared/history";
 import { api } from "./api";
 import { Controls } from "./components/Controls";
 import { PokerTable } from "./components/PokerTable";
@@ -9,6 +10,8 @@ import { SidePanel } from "./components/SidePanel";
 import { LanguageSwitch } from "./components/LanguageSwitch";
 import { HandGuide } from "./components/HandGuide";
 import { t } from "./i18n";
+import { ProfileSelect } from "./components/ProfileSelect";
+import { ProfileDashboard } from "./components/ProfileDashboard";
 import "./styles.css";
 
 function App() {
@@ -18,10 +21,23 @@ function App() {
   const [error, setError] = useState<string>();
   const [explanation, setExplanation] = useState<string>();
   const [guideOpen, setGuideOpen] = useState(false);
+  const [profile, setProfile] = useState<LocalPlayerProfile | null>(null);
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => { document.documentElement.lang = language; }, [language]);
 
   useEffect(() => {
+    const activeId = localStorage.getItem("rivermind:active-profile");
+    void api.profiles().then((profiles) => {
+      const active = activeId ? profiles.find((candidate) => candidate.id === activeId) ?? null : null;
+      setProfile(active);
+      if (!active) localStorage.removeItem("rivermind:active-session");
+    }).finally(() => setProfileReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!profileReady || !profile) return;
     const sessionId = localStorage.getItem("rivermind:active-session");
     if (!sessionId) return;
     setBusy(true);
@@ -29,12 +45,13 @@ function App() {
       .then(setGame)
       .catch(() => localStorage.removeItem("rivermind:active-session"))
       .finally(() => setBusy(false));
-  }, []);
+  }, [profileReady, profile?.id]);
 
   const start = async (config: GameConfig) => {
     setBusy(true); setError(undefined);
     try {
-      const session = await api.createSession(config);
+      if (!profile) throw new Error(language === "ru" ? "Сначала выберите профиль" : "Select a profile first");
+      const session = await api.createSession(config, profile.id);
       localStorage.setItem("rivermind:active-session", session.sessionId);
       setGame(session);
     }
@@ -62,8 +79,20 @@ function App() {
   }, [game]);
 
   const leaveSession = () => {
+    if (game) void api.endSession(game.sessionId).catch(() => undefined);
     localStorage.removeItem("rivermind:active-session");
     setGame(null);
+  };
+
+  const selectProfile = (nextProfile: LocalPlayerProfile) => {
+    localStorage.setItem("rivermind:active-profile", nextProfile.id);
+    setProfile(nextProfile); setProfileOpen(false);
+  };
+
+  const switchProfile = () => {
+    localStorage.removeItem("rivermind:active-profile");
+    localStorage.removeItem("rivermind:active-session");
+    setGame(null); setProfile(null); setProfileOpen(false);
   };
 
   useEffect(() => {
@@ -96,13 +125,16 @@ function App() {
     finally { setBusy(false); }
   };
 
-  if (!game) return <><Setup onStart={start} loading={busy} language={language} onLanguage={changeLanguage} />{error && <Toast message={error} onClose={() => setError(undefined)} />}</>;
+  if (!profileReady) return <div className="profile-loading">RIVERMIND</div>;
+  if (!profile) return <ProfileSelect language={language} onLanguage={changeLanguage} onSelect={selectProfile} />;
+  if (profileOpen) return <ProfileDashboard profile={profile} language={language} currentSessionId={game?.sessionId} onBack={() => setProfileOpen(false)} />;
+  if (!game) return <><div className="setup-profile-bar"><button onClick={switchProfile}>← {language === "ru" ? "Сменить игрока" : "Switch player"}</button><b>{profile.displayName}</b><button onClick={() => setProfileOpen(true)}>{language === "ru" ? "Профиль и история" : "Profile & history"} →</button></div><Setup onStart={start} loading={busy} language={language} onLanguage={changeLanguage} />{error && <Toast message={error} onClose={() => setError(undefined)} />}</>;
   return (
     <div className="game-shell">
       <header className="game-header">
         <div className="brand compact"><span className="brand-chip">R</span><span>RIVERMIND</span></div>
         <div className="game-meta"><span>{t(language, "hand")} <strong>#{game.handNumber}</strong></span><i /><span>{t(language, "blinds").toUpperCase()} <strong>{game.config.smallBlind} / {game.config.bigBlind}</strong></span><i /><span className={`api-state ${game.aiStatus}`}><b />{game.aiStatus === "connected" ? t(language, "apiConnected") : t(language, "apiOffline")}</span></div>
-        <div className="header-actions"><LanguageSwitch language={language} onChange={changeLanguage} /><button className="leave-table" onClick={leaveSession}>{t(language, "leave")}</button></div>
+        <div className="header-actions"><button className="leave-table" onClick={() => setProfileOpen(true)}>{profile.displayName}</button><LanguageSwitch language={language} onChange={changeLanguage} /><button className="leave-table" onClick={leaveSession}>{t(language, "leave")}</button></div>
       </header>
       <div className={`game-layout ${guideOpen ? "guide-open" : ""}`}>
         <HandGuide language={language} onClose={() => setGuideOpen(false)} />

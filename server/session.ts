@@ -22,9 +22,13 @@ import { deriveAdaptivePolicy } from "./ai/adaptivePolicy";
 import { calibrateAdaptiveDecision } from "./ai/adaptiveGuard";
 import { buildAdaptiveHandSummary, findRepeatedPlayerPatterns } from "./adaptiveHistory";
 import { StatsTracker, type ObservedAction } from "./stats";
+import type { PokerRepository } from "./db/repository";
 
 export interface Session {
   id: string;
+  profileId?: string;
+  startedAt: string;
+  handStartedAt: string;
   state: EngineState;
   tracker: StatsTracker;
   completedHands: HandHistory[];
@@ -41,9 +45,15 @@ export class SessionStore {
   private sessions = new Map<string, Session>();
   readonly bot = new OpenAIBot();
 
-  create(config: GameConfig, randomIndex?: RandomIndex): Session {
+  constructor(private readonly repository?: PokerRepository) {}
+
+  create(config: GameConfig, randomIndex?: RandomIndex, profileId?: string): Session {
+    const timestamp = new Date().toISOString();
     const session: Session = {
       id: randomUUID(),
+      profileId,
+      startedAt: timestamp,
+      handStartedAt: timestamp,
       state: createGame(config, randomIndex),
       tracker: new StatsTracker(config.startingStack, config.bigBlind),
       completedHands: [],
@@ -52,6 +62,10 @@ export class SessionStore {
       aiThinking: false,
       lastTraces: {},
     };
+    if (this.repository) {
+      if (!profileId) throw new Error("A player profile is required");
+      this.repository.createSession(session.id, profileId, config);
+    }
     this.sessions.set(session.id, session);
     if (session.state.actor && isAIPlayer(session.state.actor)) void this.runAI(session);
     return session;
@@ -75,6 +89,7 @@ export class SessionStore {
 
   next(session: Session): void {
     startNextHand(session.state);
+    session.handStartedAt = new Date().toISOString();
     session.tableTalk = undefined;
     session.lastTrace = undefined;
     session.lastTraces = {};
@@ -85,10 +100,21 @@ export class SessionStore {
     const state = session.state;
     if (!state.result || session.finalizedHands.has(state.handNumber)) return;
     session.finalizedHands.add(state.handNumber);
+    const statsBefore = session.tracker.rawSnapshot();
     session.tracker.finish(state);
+    const statsAfter = session.tracker.rawSnapshot();
+    if (this.repository && session.profileId) this.repository.persistCompletedHand({
+      profileId: session.profileId, sessionId: session.id, state,
+      startedAt: session.handStartedAt, statsBefore, statsAfter,
+    });
     session.adaptiveHands.unshift(buildAdaptiveHandSummary(state));
     session.adaptiveHands = session.adaptiveHands.slice(0, 25);
     session.completedHands.unshift({ handNumber: state.handNumber, lines: [...state.handLog], result: structuredClone(state.result) });
+  }
+
+  end(session: Session): void {
+    if (this.repository) this.repository.finishSession(session.id, session.state.street === "complete" ? session.state.players.human.stack : undefined, session.tracker.rawSnapshot().completed, session.state.config.bigBlind);
+    this.sessions.delete(session.id);
   }
 
   async runAI(session: Session): Promise<void> {
@@ -296,5 +322,4 @@ export class SessionStore {
   }
 }
 
-export const sessions = new SessionStore();
 export { playerName };

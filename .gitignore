@@ -27,6 +27,8 @@ temp/
 *.tmp
 
 # Local databases and user data
+data/
+backups/
 *.db
 *.db-journal
 *.sqlite
