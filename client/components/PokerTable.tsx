@@ -1,4 +1,5 @@
 import type { Language, PlayerId, PublicGameState, Seat } from "../../shared/types";
+import type { CoachAnalysis } from "../../shared/coach";
 import { PlayingCard } from "./Card";
 import { actionAnnouncement, playerDisplayName, resultText, strategyInfo, streetLabel, t } from "../i18n";
 
@@ -35,7 +36,8 @@ function OpponentSeat({ game, seat, slot, language }: { game: PublicGameState; s
   </div>;
 }
 
-export function PokerTable({ game, language }: { game: PublicGameState; language: Language }) {
+export function PokerTable({ game, language, coach }: { game: PublicGameState; language: Language; coach?: CoachAnalysis }) {
+  const highlights = (card?: import("../../shared/types").Card) => ({ made: Boolean(card && coach?.bestFiveCards.includes(card)), draw: Boolean(card && coach?.draws.some((d) => d.cards.includes(card))) });
   const displayPot = game.result?.pot ?? game.pot;
   const displayedPots = game.result?.pots ?? game.sidePots;
   const opponents = game.seats.filter((seat) => seat.kind === "ai");
@@ -52,13 +54,13 @@ export function PokerTable({ game, language }: { game: PublicGameState; language
         <div className="center-table">
           <div className="pot-label"><span>{t(language, "pot")}</span><strong>{displayPot.toLocaleString(locale(language))}</strong></div>
           {displayedPots.length > 1 && <div className="side-pot-labels">{displayedPots.map((pot, index) => <span key={index}>{language === "ru" ? (index === 0 ? "ОСНОВНОЙ" : `ПОБОЧНЫЙ ${index}`) : (index === 0 ? "MAIN" : `SIDE ${index}`)} <b>{pot.amount.toLocaleString(locale(language))}</b></span>)}</div>}
-          <div className="board-cards">{[0, 1, 2, 3, 4].map((index) => game.board[index] ? <PlayingCard key={game.board[index]} card={game.board[index]} delay={index * 90} /> : <div className="card-placeholder" key={index} />)}</div>
+          <div className="board-cards">{[0, 1, 2, 3, 4].map((index) => game.board[index] ? <PlayingCard key={game.board[index]} card={game.board[index]} {...highlights(game.board[index])} delay={index * 90} /> : <div className="card-placeholder" key={index} />)}</div>
           <div className="street-pill">{streetLabel(game.street, language)}</div>
         </div>
         {game.tableTalk && <div className="table-talk">“{game.tableTalk}”</div>}
         {game.result && <div className="result-banner"><span>{game.result.winners.includes("human") ? "◆" : "◇"}</span><strong>{resultText(game.result, language)}</strong></div>}
         <div className={`hero-seat ${game.actor === "human" ? "active-seat" : ""} ${human.eliminated ? "inactive-seat" : ""}`}>
-          <div className="hole-cards hero-cards"><PlayingCard card={human.cards?.[0]} delay={0} /><PlayingCard card={human.cards?.[1]} delay={80} /></div>
+          <div className="hole-cards hero-cards"><PlayingCard card={human.cards?.[0]} {...highlights(human.cards?.[0])} delay={0} /><PlayingCard card={human.cards?.[1]} {...highlights(human.cards?.[1])} delay={80} /></div>
           <div className="hero-info"><div><strong>{t(language, "you")}</strong><span className="tag">{human.eliminated ? (language === "ru" ? "ВЫБЫЛ" : "OUT") : human.folded ? (language === "ru" ? "ПАС" : "FOLDED") : game.actor === "human" ? t(language, "yourTurn") : game.positions.human}</span></div><b>{human.stack.toLocaleString(locale(language))} <small>{t(language, "chips")}</small></b>{human.streetBet > 0 && <span className="seat-bet">{language === "ru" ? "СТАВКА" : "BET"} {human.streetBet.toLocaleString(locale(language))}</span>}</div>
           <Marker game={game} playerId="human" language={language} />
         </div>

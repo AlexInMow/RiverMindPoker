@@ -18,7 +18,7 @@ function connectedness(ranks: number[]): number {
   return best;
 }
 
-export function deriveBoardMetrics(state: EngineState): BoardMetrics {
+export function deriveBoardMetrics(state: Pick<EngineState, "board">): BoardMetrics {
   const ranks = state.board.map(rankValue);
   const rankCounts = new Map<number, number>();
   const suitCounts = new Map<string, number>();

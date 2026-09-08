@@ -23,6 +23,7 @@ import { calibrateAdaptiveDecision } from "./ai/adaptiveGuard";
 import { buildAdaptiveHandSummary, findRepeatedPlayerPatterns } from "./adaptiveHistory";
 import { StatsTracker, type ObservedAction } from "./stats";
 import type { PokerRepository } from "./db/repository";
+import { buildCoachReport, captureCoachSnapshot, type CoachSnapshot } from "./coach/report";
 
 export interface Session {
   id: string;
@@ -39,6 +40,7 @@ export interface Session {
   lastTrace?: AITrace;
   lastTraces: Partial<Record<AIPlayerId, AITrace>>;
   tableTalk?: string;
+  coachSnapshots: CoachSnapshot[];
 }
 
 export class SessionStore {
@@ -61,6 +63,7 @@ export class SessionStore {
       finalizedHands: new Set(),
       aiThinking: false,
       lastTraces: {},
+      coachSnapshots: [],
     };
     if (this.repository) {
       if (!profileId) throw new Error("A player profile is required");
@@ -81,7 +84,9 @@ export class SessionStore {
     const street = session.state.street;
     const facingBet = session.state.currentBet > session.state.players.human.streetBet;
     const actionIndex = session.state.actions.length;
+    const coachSnapshot = session.state.config.coachMode ? captureCoachSnapshot(session.state, "human") : undefined;
     applyAction(session.state, "human", action);
+    if (coachSnapshot) session.coachSnapshots.push(coachSnapshot);
     this.observeAppliedAction(session, "human", actionIndex, street, facingBet);
     this.finalizeIfNeeded(session);
     if (session.state.actor && isAIPlayer(session.state.actor)) void this.runAI(session);
@@ -93,6 +98,7 @@ export class SessionStore {
     session.tableTalk = undefined;
     session.lastTrace = undefined;
     session.lastTraces = {};
+    session.coachSnapshots = [];
     if (session.state.actor && isAIPlayer(session.state.actor)) void this.runAI(session);
   }
 
@@ -181,7 +187,13 @@ export class SessionStore {
         const street = session.state.street;
         const facingBet = session.state.currentBet > session.state.players[aiId]!.streetBet;
         const actionIndex = session.state.actions.length;
+        const coachSnapshot = session.state.config.coachMode ? captureCoachSnapshot(session.state, aiId) : undefined;
         applyAction(session.state, aiId, action);
+        if (coachSnapshot) {
+          const trace = session.lastTrace?.localDecisionTrace;
+          if (trace && !calibrated.adjustment) coachSnapshot.decision = { coachIntent: trace.coachIntent, postflopStrength: trace.postflopStrength, raiseThreshold: trace.raiseThreshold };
+          session.coachSnapshots.push(coachSnapshot);
+        }
         this.observeAppliedAction(session, aiId, actionIndex, street, facingBet);
         this.finalizeIfNeeded(session);
         consecutiveActions += 1;
@@ -307,17 +319,13 @@ export class SessionStore {
   }
 
   async explain(session: Session): Promise<string> {
-    const hand = session.completedHands[0];
-    if (!hand) throw new Error("Complete a hand before requesting an explanation");
+    const report = this.coach(session);
+    return report.decisions.at(-1)?.explanation ?? report.current.madeHand;
+  }
+
+  coach(session: Session) {
     if (!session.state.config.coachMode) throw new Error("Coach mode is disabled");
-    if (!this.bot.connected) {
-      return session.lastTrace?.rawResponse && typeof session.lastTrace.rawResponse === "object" && "reasoning_summary" in session.lastTrace.rawResponse
-        ? String((session.lastTrace.rawResponse as { reasoning_summary: unknown }).reasoning_summary)
-        : session.state.config.language === "ru"
-          ? "Локальный бот выбрал действие по оценке силы руки и настройкам своего стиля. Добавьте OpenAI API-ключ для более подробного разбора."
-          : "The local bot selected an action from estimated hand strength and its configured personality. Add an OpenAI API key for a richer post-hand explanation.";
-    }
-    return this.bot.explain(JSON.stringify({ handHistory: hand.lines, result: hand.result, aiDecisionSummary: session.lastTrace?.rawResponse }), session.state.config.language);
+    return buildCoachReport(this.publicState(session), session.coachSnapshots, captureCoachSnapshot(session.state, "human"), session.state.config.language);
   }
 }
 

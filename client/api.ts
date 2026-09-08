@@ -1,4 +1,5 @@
 import type { GameConfig, Language, PublicGameState } from "../shared/types";
+import type { CoachReport } from "../shared/coach";
 import type { HistoryExport, HistoryFilters, LifetimeStats, LocalPlayerProfile, StoredHandDetail, StoredHandSummary, StoredSessionSummary } from "../shared/history";
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -9,6 +10,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  coach: (id: string) => request<CoachReport>(`/api/sessions/${id}/coach`),
   profiles: () => request<LocalPlayerProfile[]>("/api/profiles"),
   createProfile: (displayName: string) => request<LocalPlayerProfile>("/api/profiles", { method: "POST", body: JSON.stringify({ displayName }) }),
   renameProfile: (id: string, displayName: string) => request<LocalPlayerProfile>(`/api/profiles/${id}`, { method: "PATCH", body: JSON.stringify({ displayName }) }),

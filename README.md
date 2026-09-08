@@ -21,6 +21,16 @@ Every public engine mutation verifies that the remaining deck, every active seat
 - Russian-first interface with an instant `RU / EN` switch on both the lobby and the table; action history, statistics, local-bot speech, and coach output follow the selected language.
 - Settings and recent session summaries saved in browser local storage.
 
+## Interactive coach
+
+Enable **Режим тренера / Coach mode** at setup, then open **Тренер / Coach** at the table. The right panel replaces the history panel while open; narrow screens use a closable drawer. It provides the human's evaluator-derived best five, potential next-card draws, board texture, and contestable-pot call odds. Green and yellow outlines appear on the human's cards and board only while the coach is open.
+
+The **My decision**, **AI decision**, and completed **Review hand** tabs use public snapshots captured immediately before each committed action, so a flop decision is never assessed with the river board or final pot. The server owns analysis in `server/coach/`; the client only renders `shared/coach.ts` reports. AI hidden cards, decision scores, RNG and future cards are not returned. Even after a fold win, unrevealed opponents remain private. After showdown, a LocalBot action's recorded value/pressure branch can be explained; arbitrary model reasoning text is never forwarded. The legacy explanation endpoint uses the same safe report. The coach makes no LLM calls.
+
+Outs are **potential**, not guaranteed clean; shared-board improvements are explicitly qualified and overlapping combo outs count once. Pot odds are not hand strength or equity: no range equity / solver is implemented. Short all-in calls exclude inaccessible pot layers. Thin value, protection, traps and opponent ranges are not asserted without supporting evidence. OpenAI decisions therefore receive a public-context explanation, not a claimed reconstruction of model intent.
+
+Action snapshots are transient for the current hand and reset at the next hand. Existing persisted hand history and statistics are unchanged; replay of these coach snapshots from older database hands is a future extension. Dismissed learning concepts are remembered locally in the browser.
+
 ## Requirements
 
 - macOS with Node.js 20 or newer
@@ -111,7 +121,7 @@ HOST=0.0.0.0
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | No | Enables model-generated poker decisions and coach explanations. When empty, the local DummyBot is used. |
+| `OPENAI_API_KEY` | No | Enables model-generated poker decisions. When empty, the local DummyBot is used. The structured coach works in either mode without extra model calls. |
 | `OPENAI_MODEL` | No | OpenAI model used by the server. Defaults to `gpt-5.4-mini`. |
 | `PORT` | No | Express production server port. Defaults to `3001`. |
 | `HOST` | No | Network interface to bind. Defaults to `0.0.0.0` for LAN/Tailscale access; use `127.0.0.1` for local-only access. |

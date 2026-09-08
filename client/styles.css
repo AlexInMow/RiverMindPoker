@@ -99,6 +99,15 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .opponent-picker button { width: 44px; height: 34px; border: 1px solid #344139; background: #111914; color: #a6b2aa; font: 600 11px DM Mono, monospace; cursor: pointer; }
 .opponent-picker button.selected { border-color: var(--gold); background: rgba(216,185,108,.14); color: var(--gold-bright); }
 .side-panel { border-left: 1px solid var(--line); background: #090e0c; min-height: 0; max-height: calc(100dvh - var(--game-header-height)); display: flex; flex-direction: column; }
+.trainer-panel { min-width: 0; min-height: 0; overflow: auto; max-height: calc(100dvh - var(--game-header-height)); padding: 18px; background: #0c1510; border-left: 1px solid var(--line); font-size: 13px; line-height: 1.6; }
+.trainer-panel header { display: flex; align-items: center; justify-content: space-between; color: var(--gold); }
+.trainer-panel button { cursor: pointer; background: #17251d; color: #e4e9df; border: 1px solid var(--line); padding: 7px 10px; border-radius: 4px; font-size: 12px; }
+.trainer-panel nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; }
+.trainer-panel nav button[aria-pressed=true] { color: var(--gold); border-color: var(--gold); }
+.trainer-panel h3 { margin: 14px 0 6px; font-size: 17px; }.trainer-panel h4 { margin: 14px 0 6px; color: var(--gold); }.trainer-panel p { margin: 8px 0; color: #c0cfc4; }.trainer-panel small, .trainer-panel footer { color: #98af9e; font-size: 11px; }.trainer-panel section, .trainer-panel article { border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 14px; }.trainer-panel details { margin: 10px 0; }.trainer-panel summary { cursor: pointer; color: #e0d09d; }.coach-tip { border: 1px solid #527859; padding: 10px; margin: 16px 0; border-radius: 6px; }
+.coach-cards { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }.trainer-panel .coach-cards .playing-card { width: 44px; height: 62px; flex: 0 0 44px; border-radius: 5px; animation: none; }.trainer-panel .coach-cards .card-corner { font-size: 12px; line-height: 11px; top: 3px; left: 4px; }.trainer-panel .coach-cards .card-corner.bottom { top: auto; left: auto; right: 4px; bottom: 3px; }.trainer-panel .coach-cards .card-corner span + span { font-size: 10px; }.trainer-panel .coach-cards .card-suit { font-size: 23px; }
+.playing-card.coach-made { outline: 3px solid #69c990; outline-offset: 1px; }.playing-card.coach-draw { box-shadow: 0 0 0 6px #e8c56b; }
+@media (max-width: 1050px) { .trainer-panel { position: fixed; right: 0; top: var(--game-header-height); bottom: 0; width: min(380px, 92vw); z-index: 25; box-shadow: -12px 0 35px #0009; } }
 
 .hand-guide { min-width: 0; overflow: hidden; border-right: 0 solid var(--line); background: #090e0c; max-height: calc(100dvh - var(--game-header-height)); opacity: 0; transition: opacity .18s ease, border-width .28s ease; z-index: 12; }
 .guide-open .hand-guide { opacity: 1; border-right-width: 1px; }

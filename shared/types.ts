@@ -223,6 +223,8 @@ export interface LocalBotCandidateAction {
 }
 
 export interface LocalBotDecisionTrace {
+  coachIntent?: "value" | "pressure" | "check" | "call" | "fold";
+  postflopStrength?: number;
   handClass?: PreflopHandClass;
   handLabel?: string;
   rawPreflopStrength?: number;

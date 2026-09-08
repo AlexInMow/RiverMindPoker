@@ -151,6 +151,11 @@ app.post("/api/sessions/:id/explain", async (request, response, next) => {
   catch (error) { next(error); }
 });
 
+app.get("/api/sessions/:id/coach", (request, response, next) => {
+  try { response.json(sessions.coach(sessions.get(request.params.id))); }
+  catch (error) { next(error); }
+});
+
 const clientDist = resolve(process.cwd(), "dist/client");
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist));

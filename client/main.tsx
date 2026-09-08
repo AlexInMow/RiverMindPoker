@@ -13,19 +13,28 @@ import { t } from "./i18n";
 import { ProfileSelect } from "./components/ProfileSelect";
 import { ProfileDashboard } from "./components/ProfileDashboard";
 import "./styles.css";
+import { CoachPanel } from "./components/CoachPanel";
+import type { CoachReport } from "../shared/coach";
 
 function App() {
   const [game, setGame] = useState<PublicGameState | null>(null);
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem("rivermind:language") === "en" ? "en" : "ru");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [explanation, setExplanation] = useState<string>();
+  const [coachOpen, setCoachOpen] = useState(false);
+  const [coachReport, setCoachReport] = useState<CoachReport>();
   const [guideOpen, setGuideOpen] = useState(false);
   const [profile, setProfile] = useState<LocalPlayerProfile | null>(null);
   const [profileReady, setProfileReady] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => { document.documentElement.lang = language; }, [language]);
+  useEffect(() => {
+    if (!coachOpen || !game?.config.coachMode) return;
+    let cancelled = false;
+    void api.coach(game.sessionId).then((report) => { if (!cancelled) setCoachReport(report); }).catch((err) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, [coachOpen, game?.sessionId, game?.handId, game?.actions.length, game?.aiThinking, game?.config.language]);
 
   useEffect(() => {
     const activeId = localStorage.getItem("rivermind:active-profile");
@@ -103,7 +112,7 @@ function App() {
 
   const nextHand = async () => {
     if (!game || busy || game.aiThinking || game.street !== "complete") return;
-    setBusy(true); setError(undefined); setExplanation(undefined);
+    setBusy(true); setError(undefined); setCoachReport(undefined);
     try { setGame(await api.next(game.sessionId)); }
     catch (err) { setError(err instanceof Error ? err.message : t(language, "nextError")); }
     finally { setBusy(false); }
@@ -111,19 +120,13 @@ function App() {
 
   const act = async (type: string, amount?: number) => {
     if (!game || busy || game.aiThinking) return;
-    setBusy(true); setError(undefined); setExplanation(undefined);
+    setBusy(true); setError(undefined); setCoachReport(undefined);
     try { setGame(await api.action(game.sessionId, { type, amount })); }
     catch (err) { setError(err instanceof Error ? err.message : t(language, "actionError")); }
     finally { setBusy(false); }
   };
 
-  const explain = async () => {
-    if (!game) return;
-    setBusy(true);
-    try { setExplanation((await api.explain(game.sessionId)).explanation); }
-    catch (err) { setError(err instanceof Error ? err.message : t(language, "explainError")); }
-    finally { setBusy(false); }
-  };
+  const activeCoach = coachOpen && coachReport?.handId === game?.handId && coachReport?.actionCount === game?.actions.length ? coachReport : undefined;
 
   if (!profileReady) return <div className="profile-loading">RIVERMIND</div>;
   if (!profile) return <ProfileSelect language={language} onLanguage={changeLanguage} onSelect={selectProfile} />;
@@ -142,14 +145,13 @@ function App() {
           {!guideOpen && <button type="button" className="hand-guide-trigger" onClick={() => setGuideOpen(true)} aria-expanded={false}>
             <span>?</span><b>{t(language, "handGuide")}</b>
           </button>}
-          <PokerTable game={game} language={language} />
+          <PokerTable game={game} language={language} coach={activeCoach?.current} />
           <Controls game={game} language={language} disabled={busy || game.aiThinking || (game.street !== "complete" && game.actor !== "human")} onAction={act} onNext={nextHand} />
-          {game.street === "complete" && game.config.coachMode && <button className="coach-button" disabled={busy} onClick={explain}>◇ {t(language, "why")}</button>}
+          {game.config.coachMode && <button className="coach-button" onClick={() => setCoachOpen(!coachOpen)} aria-expanded={coachOpen}>◇ {language === "ru" ? "Тренер" : "Coach"}</button>}
           {game.matchOver && <SessionComplete humanWon={game.seats.filter((seat) => seat.kind === "ai").every((seat) => game.players[seat.playerId]?.eliminated)} language={language} onNewSession={leaveSession} />}
         </section>
-        <SidePanel game={game} language={language} />
+        {coachOpen && game.config.coachMode ? (activeCoach ? <CoachPanel key={game.handId} report={activeCoach} language={language} onClose={() => setCoachOpen(false)} /> : <aside className="trainer-panel"><button onClick={() => setCoachOpen(false)}>×</button><p>{language === "ru" ? "Готовим разбор…" : "Preparing review…"}</p></aside>) : <SidePanel game={game} language={language} />}
       </div>
-      {explanation && <div className="coach-modal"><div><button onClick={() => setExplanation(undefined)}>×</button><span>{t(language, "coachReview")}</span><h3>{t(language, "decisionSummary")}</h3><p>{explanation}</p></div></div>}
       {error && <Toast message={error} onClose={() => setError(undefined)} />}
     </div>
   );

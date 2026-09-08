@@ -200,6 +200,8 @@ function decidePostflop(state: AIVisibleGameState, strategy: Strategy, randomRol
   const choice: WeightedAction = { legal: legalChoice, action: legalChoice.type, amount, probability: 1 };
   const raised = aggressive && legalChoice === aggressive;
   const trace: LocalBotDecisionTrace = {
+    coachIntent: raised ? (strength > valueThreshold ? "value" : "pressure") : choice.action === "check" ? "check" : choice.action === "fold" ? "fold" : "call",
+    postflopStrength: strength,
     preflopBetLevel: state.contextMetrics.preflopBetLevel, effectiveStackBB: state.contextMetrics.effectiveStackBB,
     amountToCallBB: state.contextMetrics.amountToCallBB, potOdds: state.potOdds,
     committedBB: state.contextMetrics.aiCommittedBB, committedFraction: state.contextMetrics.committedFractionOfEffectiveStack,
