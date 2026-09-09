@@ -3,6 +3,8 @@ import { evaluateHand, type HandScore } from "../../poker-engine/evaluator";
 import type { Card, Language } from "../../shared/types";
 import type { CoachAnalysis, CoachDraw } from "../../shared/coach";
 import { deriveBoardMetrics } from "../ai/context";
+import { analyzePreflop } from "./preflop";
+import type { PreflopContext } from "../../shared/preflopCoach";
 
 const rank = (n: number) => n === 14 ? "A" : n === 13 ? "K" : n === 12 ? "Q" : n === 11 ? "J" : String(n);
 const rankPlural = (n: number) => ["двоек", "троек", "четвёрок", "пятёрок", "шестёрок", "семёрок", "восьмёрок", "девяток", "десяток", "валетов", "дам", "королей", "тузов"][n - 2];
@@ -17,7 +19,8 @@ export function describeHand(score: HandScore, language: Language): string {
 }
 
 /** Uses only the viewer's cards and board; outs are potential improvements, never claimed clean. */
-export function analyzeSituation(hole: Card[], board: Card[], language: Language, price?: { call: number; pot: number; contestablePotAfter: number }): CoachAnalysis {
+export function analyzeSituation(hole: Card[], board: Card[], language: Language, price?: { call: number; pot: number; contestablePotAfter: number }, preflopContext?: PreflopContext): CoachAnalysis {
+  const preflop = board.length === 0 && hole.length === 2 && preflopContext ? analyzePreflop(hole as [Card, Card], preflopContext, language) : undefined;
   const ru = language === "ru";
   const cards = [...hole, ...board];
   const score = cards.length >= 5 && hole.length === 2 ? evaluateHand(cards) : undefined;
@@ -72,6 +75,7 @@ export function analyzeSituation(hole: Card[], board: Card[], language: Language
   const potOdds = price && price.call > 0 ? { call: price.call, potBefore: price.pot, potAfter: price.pot + price.call, contestablePotAfter: price.contestablePotAfter, requiredEquity: price.call / price.contestablePotAfter } : undefined;
   if (potOdds) warnings.push(ru ? "Цена колла уже учитывает доступную вам часть банка. Будущие ставки, диапазоны и реализация equity не рассчитаны." : "Call price uses the pot you can contest. Future bets, ranges and equity realization are not calculated.");
   return {
+    preflop,
     madeHand: score ? describeHand(score, language) : hole.length === 2 ? (rankValue(hole[0]) === rankValue(hole[1]) ? `${ru ? "Карманная пара" : "Pocket pair"} ${rank(rankValue(hole[0]))}` : `${ru ? "Стартовая рука" : "Starting hand"}: ${hole.map(cardLabel).join(" ")}`) : (ru ? "Карты неизвестны" : "Cards unknown"),
     bestFiveCards: score?.bestFive ?? [], draws, outs: [...new Set(draws.flatMap((d) => d.potentialOuts))],
     boardTexture: { label: board.length < 3 ? (ru ? "Префлоп — доски ещё нет" : "Preflop — no board yet") : metrics.wetness >= .55 ? (ru ? "Динамичная" : "Dynamic") : metrics.wetness >= .3 ? (ru ? "Умеренно динамичная" : "Moderately dynamic") : (ru ? "Относительно сухая" : "Relatively dry"), reasons: board.length ? reasons : [], metrics },

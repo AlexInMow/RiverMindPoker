@@ -1,4 +1,5 @@
 import type { BoardMetrics, Card, PlayerId, Street } from "./types";
+import type { PreflopAnalysis } from "./preflopCoach";
 
 export interface CoachDraw {
   kind: string;
@@ -8,6 +9,7 @@ export interface CoachDraw {
   description: string;
 }
 export interface CoachAnalysis {
+  preflop?: PreflopAnalysis;
   madeHand: string;
   bestFiveCards: Card[];
   draws: CoachDraw[];

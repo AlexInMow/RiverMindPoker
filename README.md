@@ -31,6 +31,16 @@ Outs are **potential**, not guaranteed clean; shared-board improvements are expl
 
 Action snapshots are transient for the current hand and reset at the next hand. Existing persisted hand history and statistics are unchanged; replay of these coach snapshots from older database hands is a future extension. Dismissed learning concepts are remembered locally in the browser.
 
+### Preflop coach methodology
+
+The coach materializes all **169** starting classes once (13 pairs, 78 suited, 78 offsuit), using the existing `server/ai/preflop.ts` classifier as its rating source. `getStartingHandClass` validates two distinct physical cards before canonicalizing rank order. The versioned **local-preflop-v1** rating is `round(existing strength × 100)`: AA 100, KK 97, QQ 93, AKs 90, AKo 87; 72o is at the shared floor of 5. Pairs and key hands use the existing explicit lookup; other hands use its high/low-rank, suitedness and gap formula. This is an internal educational heuristic, **not** simulated equity, a percentile, a solver chart, or an empirically measured win rate. Small rating differences have no scientific precision. Categories use thresholds 90/78/65/40/25/12.
+
+Practical willingness to invest is separate from that fixed rating. The coach adjusts its teaching threshold by unopened/limped/open/open+callers/3-bet/4-bet+ context, BTN/SB/BB/UTG position at the actual 2–4 player table, number of players, raise size, aggressor position and effective stack. Frequency is deliberately qualitative (almost always/often/sometimes/rarely/almost never), **not a percentage of observed situations or mixed strategy**. A free BB check does not imply willingness to invest chips. Recommendations are constrained by the engine's legal actions, including closed raise rights. A 2–3 BB example open is shown only where its range intersects legal opening bounds.
+
+Effective stack includes current commitments and uses the latest aggressor when present; otherwise the largest non-folded opponent is used, with the multiway limitation explained in the panel. Short/medium/deep means below 30 / 30–99 / at least 100 BB. The action snapshot preserves position, effective stack and legal choices before the player's move. Unrevealed AI cards never receive a preflop analysis in the viewer's response.
+
+No Monte Carlo work runs in the coach request: the existing evaluator supports simulation, but range modeling, convergence and background caching are a separate extension. `PreflopEquityProvider` leaves an async interface for a future provider with explicit opponent count, range assumption, method and sample count. Equity is omitted today. Future ranges/charts can replace the recommendation layer without changing the rating or React components.
+
 ## Requirements
 
 - macOS with Node.js 20 or newer

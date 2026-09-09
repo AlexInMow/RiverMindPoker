@@ -3,6 +3,8 @@ import type { Card, Language, LocalBotDecisionTrace, PlayerAction, PlayerId, Pub
 import type { CoachDecision, CoachReport } from "../../shared/coach";
 import { analyzeSituation } from "./analyzer";
 import { compareScores, evaluateHand } from "../../poker-engine/evaluator";
+import { getLegalActions } from "../../poker-engine/game";
+import type { PreflopContext } from "../../shared/preflopCoach";
 
 /** Action-time public facts only. Never retain deck, burns or opponents' hole cards. */
 export interface CoachSnapshot {
@@ -16,6 +18,7 @@ export interface CoachSnapshot {
   contestablePotAfter: number;
   priorActions: PlayerAction[];
   lastToAct: boolean;
+  preflop?: PreflopContext;
   decision?: Pick<LocalBotDecisionTrace, "coachIntent" | "postflopStrength" | "raiseThreshold">;
 }
 export function captureCoachSnapshot(state: EngineState, id: PlayerId): CoachSnapshot {
@@ -25,7 +28,11 @@ export function captureCoachSnapshot(state: EngineState, id: PlayerId): CoachSna
   const contestablePotAfter = Object.values(state.players).reduce((sum, p) => sum + Math.min(p!.totalContribution, cap), 0) + call;
   const index = state.seats.findIndex((s) => s.playerId === state.button);
   const order = [...state.seats.slice(index + 1), ...state.seats.slice(0, index + 1)].filter((s) => { const p = state.players[s.playerId]!; return !p.folded && !p.eliminated && !p.allIn; });
-  return { index: state.actions.length, player: id, street: state.street, board: [...state.board], pot: state.pot, streetBet: own.streetBet, call, contestablePotAfter, priorActions: state.actions.map((a) => ({ ...a })), lastToAct: order.at(-1)?.playerId === id };
+  const aggressor = [...state.actions].reverse().find((a) => a.street === "preflop" && a.aggressive)?.player;
+  const opponents = Object.values(state.players).filter((p) => p!.id !== id && !p!.eliminated && !p!.folded);
+  const opponentTotal = aggressor && aggressor !== id ? state.players[aggressor]!.stack + state.players[aggressor]!.totalContribution : Math.max(0, ...opponents.map((p) => p!.stack + p!.totalContribution));
+  const preflop: PreflopContext | undefined = state.street === "preflop" ? { position: state.positions[id] ?? "", playerCount: state.seats.filter((s) => !state.players[s.playerId]!.eliminated).length, playersInHand: opponents.length + 1, bigBlind: state.config.bigBlind, effectiveStackBb: Math.min(own.stack + own.totalContribution, opponentTotal) / state.config.bigBlind, aggressor: aggressor !== id ? aggressor : undefined, aggressorPosition: aggressor && aggressor !== id ? state.positions[aggressor] : undefined, actions: state.actions.map((a) => ({ ...a })), amountToCall: call, currentBet: state.currentBet, legalActions: getLegalActions(state, id), canAct: state.actor === id } : undefined;
+  return { index: state.actions.length, player: id, street: state.street, board: [...state.board], pot: state.pot, streetBet: own.streetBet, call, contestablePotAfter, priorActions: state.actions.map((a) => ({ ...a })), lastToAct: order.at(-1)?.playerId === id, preflop };
 }
 const names = (id: PlayerId, ru: boolean) => id === "human" ? (ru ? "Вы" : "You") : `AI ${id === "ai" ? "1" : id.replace("ai-", "")}`;
 
@@ -35,7 +42,7 @@ function reviewDecision(snapshot: CoachSnapshot, action: PlayerAction, game: Pub
   // Explicit privacy boundary. Even available internal metadata is ignored until this player reveals.
   const visible = snapshot.player === "human" || player.showCards;
   const cards = visible ? player.cards : null;
-  const analysis = cards ? analyzeSituation(cards, snapshot.board, language, { call: snapshot.call, pot: snapshot.pot, contestablePotAfter: snapshot.contestablePotAfter }) : undefined;
+  const analysis = cards ? analyzeSituation(cards, snapshot.board, language, { call: snapshot.call, pot: snapshot.pot, contestablePotAfter: snapshot.contestablePotAfter }, snapshot.preflop) : undefined;
   const labels: Record<string, string> = ru ? { fold: "пас", check: "чек", call: "колл", bet: "ставка", raise: "рейз до", "all-in": "олл-ин до" } : { fold: "fold", check: "check", call: "call", bet: "bet", raise: "raise to", "all-in": "all-in to" };
   const aggressive = action.aggressive === true;
   const paid = action.action === "call" ? action.amount ?? 0 : Math.max(0, (action.effectiveAmount ?? action.amount ?? 0) - snapshot.streetBet);
@@ -70,6 +77,7 @@ function reviewDecision(snapshot: CoachSnapshot, action: PlayerAction, game: Pub
     if (aggressive) explanation += ru ? " Рейз может получить коллы сильных рук или встретить ререйз; одна опасная доска не доказывает, что соперник сбросит." : "A raise can be called by strong hands or reraised; a threatening board alone does not imply folds.";
   }
   if (action.action === "all-in") actionCategory += aggressive ? (ru ? " · олл-ин" : " · all-in") : (ru ? " · колл на весь стек" : " · all-in call");
+  if (analysis?.preflop && snapshot.player === "human") { explanation = `${title} · ${analysis.preflop.handClass}. ${analysis.preflop.explanation} ${analysis.preflop.reasons.join(" ")}`; certainty = "heuristic"; }
   return { index: snapshot.index, player: snapshot.player, street: snapshot.street, title, explanation, actionCategory, certainty, board: snapshot.board, analysis, betSizePercent: aggressive && snapshot.pot ? paid / snapshot.pot * 100 : undefined, technicalData: meta ? { strength: meta.postflopStrength, valueThreshold: meta.raiseThreshold, source: ru ? "Внутренняя эвристика LocalBot, не equity" : "LocalBot heuristic, not equity" } : undefined };
 }
 
@@ -84,7 +92,7 @@ export function buildCoachReport(game: PublicGameState, snapshots: CoachSnapshot
   const keyMoment = focus && focus.call > 0 ? (ru ? `Точка для разбора: ${focus.street}, цена продолжения ${focus.call} при банке ${focus.pot}. ` : `Review point: ${focus.street}, continuation cost ${focus.call} into ${focus.pot}. `) : "";
   return {
     handId: game.handId, actionCount: game.actions.length,
-    current: analyzeSituation(game.players.human.cards ?? [], game.board, language, price), decisions,
+    current: analyzeSituation(game.players.human.cards ?? [], game.board, language, price, current.preflop), decisions,
     showdown: game.result?.endReason === "showdown" ? game.seats.flatMap((s) => {
       const p = game.players[s.playerId]!;
       if (!p.showCards || !p.cards) return [];

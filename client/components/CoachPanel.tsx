@@ -3,6 +3,7 @@ import type { CoachAnalysis, CoachReport } from "../../shared/coach";
 import type { Card, Language } from "../../shared/types";
 import { PlayingCard } from "./Card";
 import { playerDisplayName, streetLabel } from "../i18n";
+import { PreflopCoach } from "./PreflopCoach";
 
 function Cards({ cards }: { cards: Card[] }) {
   return <div className="coach-cards">{cards.map((card) => <PlayingCard key={card} card={card} />)}</div>;
@@ -10,7 +11,7 @@ function Cards({ cards }: { cards: Card[] }) {
 function Analysis({ analysis: a, language }: { analysis: CoachAnalysis; language: Language }) {
   const ru = language === "ru";
   return <>
-    <h3>{a.madeHand}</h3>
+    {a.preflop ? <PreflopCoach analysis={a.preflop} language={language} /> : <h3>{a.madeHand}</h3>}
     {a.bestFiveCards.length > 0 && <><small>{ru ? "Лучшие 5 карт · зелёная подсветка на столе" : "Best five · green on table"}</small><Cards cards={a.bestFiveCards} /></>}
     {a.draws.length > 0 && <section><h4>{ru ? "Потенциал · жёлтая подсветка" : "Potential · yellow highlights"}</h4>{a.draws.map((d) => <details key={d.kind}><summary>{d.label} — {d.potentialOuts.length} {ru ? "потенциальных аутов" : "potential outs"}</summary><p>{d.description}</p><Cards cards={d.potentialOuts} /></details>)}<p>{ru ? "Всего уникальных потенциальных улучшений" : "Unique potential improvements"}: {a.outs.length}</p></section>}
     {a.potOdds && <section><h4>{ru ? "Цена колла" : "Call price"}</h4><p>{ru ? "Банк сейчас" : "Current pot"}: {a.potOdds.potBefore} · {ru ? "доплатить" : "call"}: {a.potOdds.call}</p><p>{ru ? "После колла" : "After calling"}: {a.potOdds.potAfter} · {ru ? "доступно вам" : "contestable"}: {a.potOdds.contestablePotAfter}</p><strong>{ru ? "Необходимое equity" : "Required equity"}: {(a.potOdds.requiredEquity * 100).toFixed(1)}%</strong><p>{ru ? "Equity вашей руки против диапазонов не рассчитано. Одной комбинации или числа аутов недостаточно, чтобы рекомендовать колл." : "Your equity against ranges is not calculated. A category or out count alone cannot justify a call."}</p></section>}
@@ -23,12 +24,13 @@ export function CoachPanel({ report, language, onClose }: { report: CoachReport;
   const ru = language === "ru";
   const [mode, setMode] = useState<"current" | "human" | "ai" | "hand">("current");
   const [tip, setTip] = useState<{ id: string; text: string }>();
+  const concepts = [...(report.current.preflop?.learningConcepts ?? []), ...report.current.learningConcepts];
   useEffect(() => {
     try {
       const seen: string[] = JSON.parse(localStorage.getItem("rivermind:coach-concepts") ?? "[]");
-      setTip(report.current.learningConcepts.find((c) => !seen.includes(c.id)));
+      setTip(concepts.find((c) => !seen.includes(c.id)));
     } catch { setTip(undefined); }
-  }, [report.handId, report.current.learningConcepts.map((c) => c.id).join(",")]);
+  }, [report.handId, concepts.map((c) => `${c.id}:${c.text}`).join(",")]);
   const dismissTip = () => {
     if (tip) try { const seen = JSON.parse(localStorage.getItem("rivermind:coach-concepts") ?? "[]"); localStorage.setItem("rivermind:coach-concepts", JSON.stringify([...new Set([...seen, tip.id])])); } catch { /* storage may be disabled */ }
     setTip(undefined);
